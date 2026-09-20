@@ -1,8 +1,8 @@
 # SPEC — Student Study-Planner Dashboard
 
-A dark-mode web dashboard that helps students manage tests, exams and bagruts, and plan their study time by showing test dates, countdowns and how much study time is left.
+A dark-mode web dashboard that helps students manage tests, exams and bagruts, and plan their study time by showing test dates, countdowns and how much study time is left. It is built around the school timetable, fed from Google Sheets, and turns grades into clear averages and insights.
 
-- **Status:** Draft v0.2 (adds Google Sheets data source, school-schedule-driven dashboard, mandatory 1-week test notice, per-subject grade averages)
+- **Status:** Draft v0.3 (adds expanded student features, analytics, screen-by-screen UX, Israeli school specifics, a fact-checked technical section and a decision log)
 - **Languages:** Hebrew (RTL) and English (LTR), switchable at runtime
 - **Theme:** Dark mode (primary and only theme in v1)
 
@@ -11,28 +11,35 @@ A dark-mode web dashboard that helps students manage tests, exams and bagruts, a
 ## 1. Overview & Goals
 
 ### 1.1 Problem
-Students juggle many tests, quizzes, exams and (later) bagrut exams with dates spread across subjects. They usually notice a deadline too late and do not know how much study time they actually have left, so they cram or under-prepare.
+Students juggle many tests, quizzes, exams and (later) bagrut exams with dates spread across subjects. They usually notice a deadline too late and do not know how much study time they actually have left, so they cram or under-prepare. Grades sit in a separate place, so they also cannot see which subjects need attention.
 
 ### 1.2 Purpose
 A single dashboard, **built around the student's school schedule and fed from Google Sheets**, that answers at a glance:
 1. **What is coming up?** (next tests/exams, sorted by date — always announced **one week ahead**)
 2. **How long do I have?** (live countdown)
 3. **Am I ready?** (study time planned/logged vs. study time needed)
-4. **What should I do today?** (today's lessons from the school schedule + generated study tasks)
-5. **How am I doing?** (average grade per subject and overall)
+4. **What should I do today?** (today's lessons from the school schedule + a short "Today's Mission" list)
+5. **How am I doing?** (average grade per subject and overall, trends and predictions)
 
 ### 1.2.1 Core ideas
 1. **School-schedule-based:** the weekly timetable is the backbone of the dashboard. It shows today's lessons, links each test to its lesson slot, and defines when the student is free to study.
 2. **One-week notice:** every test gets an automatic notice **7 days before** it, no matter how it was added.
 3. **Google Sheets as the data source:** schedule, tests and grades are read from Google Sheets. No manual re-typing; the sheet is the source of truth.
 4. **Grades & averages:** grades are read from the sheet and the average is calculated for every subject (and overall).
+5. **Insight, not just data:** the app points out weak subjects, tests bunched together, and what grade is needed to reach a goal.
+
+### 1.2.2 Product principles
+- **The sheet is the truth.** The app never overwrites it; anything the app adds itself is clearly marked "local".
+- **Never nag twice.** One well-timed notice beats many. The 7-day notice is mandatory; everything else is optional and can be quiet.
+- **Always explain a number.** Every average, score or prediction can be tapped to show how it was calculated.
+- **Calm and encouraging.** Dark, low-glare UI; streaks pause instead of "breaking"; no shaming for low grades.
+- **Hebrew and English are equals.** Same features, same quality, correct direction, gender-neutral Hebrew copy.
 
 ### 1.3 Success criteria
-- A new student can add their first exam and see a countdown in under **60 seconds**.
+- A new student can connect a sheet and see their first countdown in under **2 minutes** (under **60 seconds** for adding a first exam by hand).
 - The dashboard clearly flags any exam where the student is "behind" on study time.
-- Reminders fire at the configured lead times without the user opening the site.
-- **100% of tests found in the sheet get a 7-day notice**, including tests added to the sheet less than 7 days ahead (notice fires on the next sync).
-- Changes made in Google Sheets appear on the dashboard within **15 minutes** (or immediately on manual refresh).
+- **100% of tests found in the sheet get a 7-day notice**, including tests added to the sheet less than 7 days ahead (notice fires on the next sync). The notice is delivered through at least one guaranteed channel (see §10.2): in-app banner and/or email.
+- Changes made in Google Sheets appear on the dashboard within **15 minutes** while the app is open (or immediately on manual refresh).
 - The per-subject average shown matches a manual calculation from the same sheet rows.
 - All screens are usable in both Hebrew (RTL) and English (LTR) with no layout breakage.
 - Text/background contrast meets **WCAG AA** in dark mode.
@@ -40,9 +47,10 @@ A single dashboard, **built around the student's school schedule and fed from Go
 ### 1.4 Non-goals (v1)
 - Not a full school management system (no attendance or teacher tools). Grades are **read-only and displayed**, not managed here.
 - **Read-only from Google Sheets in v1:** the website never writes back to the sheet.
-- No social/multi-student features.
+- No social/multi-student features; no shared class sheets (privacy, see Decision D8).
 - No light theme.
 - No AI tutoring or content delivery.
+- No official Ministry of Education integration in v1 (dates and grades come from the student's sheet).
 
 ---
 
@@ -52,11 +60,13 @@ A single dashboard, **built around the student's school schedule and fed from Go
 
 | Persona | Age | Needs | Design implication |
 |---|---|---|---|
-| **Middle schooler** (grades 7–9) | 12–15 | Simple view of upcoming tests; friendly reminders; low setup effort | Simple defaults, playful but not childish tone, few required fields |
-| **High schooler** (grades 10–11) | 15–17 | Many subjects, overlapping tests, planning ahead | Calendar view, per-subject readiness, plan generator |
-| **Bagrut-year student** (grade 12) | 17–19 | High-stakes exams, large syllabi, moed A/B, weighted subjects (units/יחידות) | Bagrut tracker, topic-level progress, longer planning horizon |
+| **Middle schooler** (grades 7–9, ז–ט) | 12–15 | Simple view of upcoming tests; friendly reminders; low setup effort | Simple defaults, playful but not childish tone, few required fields, analytics hidden behind "More" |
+| **High schooler** (grades 10–11, י–יא) | 15–17 | Many subjects, overlapping tests, planning ahead | Calendar view, per-subject readiness, plan generator, test-cluster warnings |
+| **Bagrut-year student** (grade 12, יב) | 17–19 | High-stakes exams, large syllabi, moed A/B, weighted subjects (units/יחידות) | Bagrut tracker, topic-level progress, readiness score, predicted final grade |
 
-Secondary (later): parents viewing a read-only summary.
+Secondary (later): parents viewing a read-only summary; teachers who maintain the class template.
+
+Priority key used in this document: **P0** = must be in v1, **P1** = should be in v1 if time allows, **P2** = later.
 
 ---
 
@@ -64,40 +74,40 @@ Secondary (later): parents viewing a read-only summary.
 
 ### 3.1 MVP (v1)
 
-#### F0. Google Sheets data source
-- The student (or parent/teacher) connects **one Google Spreadsheet** by pasting its link or signing in with Google.
-- The app reads these tabs (exact columns in §8.1): **Schedule**, **Exams**, **Grades**, and optionally **Subjects**.
+#### F0. Google Sheets data source (P0)
+- The student (or parent/teacher) connects **one Google Spreadsheet** by choosing it with the Google file picker (see §10.1 for the scope choice and fallbacks).
+- The app reads these tabs (exact columns in §8.1): **Schedule**, **Exams**, **Grades**, and optionally **Subjects**, **Topics**, **Holidays**.
 - **Sync:** on app open, then every 15 minutes while open, plus a manual "Refresh" button. Last-sync time is shown in the header.
 - **Validation:** rows with a bad date, unknown subject or non-numeric grade are skipped and listed in a "Sync issues" panel with the row number, so the student knows what to fix in the sheet.
 - **Offline:** the last successful sync is cached and shown with an "offline / last updated" label.
 - **Read-only:** the site never edits the sheet. Tests or grades added by hand in the app (optional) are stored locally and marked as "local".
-- A **template spreadsheet** is provided so students can start with the correct tabs and headers.
+- A **template spreadsheet** is provided so students can start with the correct tabs and headers, including an optional Apps Script for email notices (§10.2).
 
-#### F0.1. School schedule (timetable)
+#### F0.1. School schedule (timetable) (P0)
 - Shows the weekly timetable (day, lesson number/time, subject, room, teacher) from the **Schedule** tab.
 - The dashboard's **Today** widget lists today's lessons in order, highlights the current/next lesson, and shows the tests that fall on that day.
 - Each test is matched to its lesson slot by subject + date, so the calendar shows "Math test — period 3".
 - **Free time is derived from the schedule:** hours outside lessons (after school, free periods, days off) become the student's default study availability (replaces most manual availability entry; manual blocked time still works on top).
-- Holidays / days off can be added in the sheet (a `Schedule` row with `type = off`).
+- Holidays / days off come from the **Holidays** tab or from a `Schedule` row with `type = off`. One-off changes (substitute lesson, cancelled lesson) are Schedule rows with a specific `date`.
 
-#### F1. Exams & tests manager
+#### F1. Exams & tests manager (P0)
 - Tests are **loaded from the Exams tab** of the sheet (subject, title, **type**, date & time, weight, topics, notes). Manual add/edit in the app is optional and local-only.
 - **Exam types:** quiz (בוחן), test (מבחן), exam (בחינה), project deadline, bagrut (בגרות) with moed A / moed B.
-- Exams sorted by date; past exams move to a "Done" archive with an optional score.
+- Exams sorted by date; past exams move to a "Done" archive with an optional score and a short reflection (§3.3).
 
-#### F2. Live countdown
+#### F2. Live countdown (P0)
 - Every upcoming exam shows time left as **days · hours · minutes** (minutes only within the final 24h).
 - Countdown color follows urgency (see Design System §6.4).
 
-#### F3. Study-time-left calculator
+#### F3. Study-time-left calculator (P0)
 - For each exam computes:
-  - **Time available** = study hours the student has free between now and the exam (from their weekly availability, minus blocked days).
+  - **Time available** = study hours the student has free between now and the exam (from the school schedule and manual blocks).
   - **Time needed** = recommended study hours (from weight, difficulty, and number of topics).
   - **Time logged** = hours already studied.
-- Shows a **readiness status:** `On track` / `Tight` / `Behind`, plus the number of hours to add per day to catch up.
+- Shows a **readiness status:** `On track` / `Tight` / `Behind`, plus the number of minutes to add per day to catch up.
 - Formula details in §9.
 
-#### F4. Reminders & notifications
+#### F4. Reminders & notifications (P0)
 - **One-week notice (mandatory):** for **every** test, quiz, exam and bagrut, the student is notified **7 days before** the test date. This notice is on by default and **cannot be turned off per test** (the student may change only its channel and the time of day, default 16:00).
   - Message example: "Math test in 7 days (Sun 28 Sep, period 3). Start planning — you have ~9h of free study time."
   - The notice shows the study-time-left result (F3) so it is actionable.
@@ -105,52 +115,84 @@ Secondary (later): parents viewing a read-only summary.
   - If the test date moves, the 7-day notice is recomputed and re-sent once.
   - Deduplicated: one 7-day notice per test, even if several tests fall on the same day (they are grouped into a single notification).
 - Additional configurable lead times per exam, defaults: **3 days, 1 day, morning of, 1 hour before** (7 days is always included).
-- Channels: in-app banner + browser push notification (opt-in). Email is later (§3.2).
+- Channels (see §10.2 for reliability of each): **in-app banner** (always), **email via the template's Apps Script** (opt-in, works with the app closed), **Web Push** (opt-in, best effort).
 - Daily "today's plan" reminder at a user-chosen time.
 - Quiet hours (no notifications at night; default 21:30–07:00).
+- **Notification center** (P1): a list of every notice sent, so nothing is lost if a push is missed.
+- **Weekly digest** (P1, optional): Sunday morning summary of the week's tests, load and goals.
 
-#### F5. Study plan generator
+#### F5. Study plan generator (P0)
 - Splits an exam's topics across the available days before the test.
 - Respects blocked days (other exams, activities) and the student's daily study cap.
 - Produces **tasks** ("Chapter 4 – Trigonometry, 45 min") the student can check off, move, or regenerate.
 - Auto-rebalances when a task is missed or the exam date changes.
+- Adds **spaced-revision tasks** (+1, +3, +7 days after a topic is completed) when time allows (§9.15).
 
-#### F6. Subjects
-- Add subjects with a color and (for bagrut subjects) the number of units (יחידות).
+#### F6. Subjects (P0)
+- Subjects come from the sheet, with a color and (for bagrut subjects) the number of units (יחידות).
 - Subject color is used consistently across the calendar, cards and charts.
 
-#### F7. Calendar
-- Week and month views showing exams, study tasks and blocked time.
+#### F7. Calendar (P1)
+- Week and month views showing lessons, exams, study tasks and blocked time.
 - Drag a study task to another day to reschedule.
+- Optional **workload heat map** overlay showing how heavy each week is (§9.13).
 
-#### F8. Study session logging
+#### F8. Study session logging (P0)
 - Start/stop a timer or add a manual entry (subject, topic, duration).
-- Logged time feeds the readiness calculation.
+- Logged time feeds the readiness calculation, the streak and the weekly goal.
 
-#### F8.1. Grades & averages
+#### F8.1. Grades & averages (P0)
 - Grades are loaded from the **Grades** tab (subject, grade, date, weight, title/type).
-- **Per-subject average** is calculated for every subject and shown as a card with: average, number of grades, trend arrow (compared with the previous average), and lowest/highest grade.
+- **Per-subject average** is calculated for every subject and shown as a card with: average, number of grades, trend arrow (§9.10), and lowest/highest grade.
 - **Overall average** across all subjects; for bagrut subjects, optionally weighted by units (יחידות).
 - **Weighting:** if a `weight` column is filled, a weighted average is used; if empty, all grades count equally (see §9.6).
-- **Grade scale:** 0–100 by default (Israeli standard); configurable per sheet (e.g., 1–10, A–F is out of scope for v1).
+- **Grade scale:** 0–100 by default (Israeli standard); configurable per sheet (e.g., 1–10; letter grades are out of scope for v1).
 - **Grade history:** tap a subject to see a line chart of grades over time and the list of grades.
 - **"What do I need?" helper:** the student sets a target average per subject and sees the grade needed on the next test to reach it.
-- Grade colors: ≥ 85 `--ok`, 60–84 neutral/`--primary`, < 60 `--urgent` (always with a number, never color alone). Passing threshold configurable (default 55).
+- Grade colors: ≥ 85 `--ok`, 55–84 neutral/`--primary`, < 55 `--urgent` (always with a number, never color alone). Passing threshold configurable per subject (default **55**; see §7.1).
 - Subjects with no grades yet show "No grades yet" instead of 0.
 
-#### F9. Settings
-- Language toggle (Hebrew / English), notification settings, **Google Sheets connection**, weekly availability (auto-derived from the school schedule, editable), daily study cap, week start day (Sunday default in Hebrew, configurable), grade scale and target averages.
+#### F9. Settings (P0)
+- Language toggle (Hebrew / English), notification settings and channels, **Google Sheets connection**, weekly availability (auto-derived from the school schedule, editable), daily study cap, weekly study goal, week start day and school days (Sunday default; Friday configurable as school/short/off), grade scale, pass mark and target averages, backup export/import.
 
-### 3.2 Later (post-v1)
-- Streaks and gentle gamification (study streak, weekly goal).
-- Pomodoro focus timer with break reminders.
-- Email/WhatsApp reminders.
+### 3.2 Later (post-v1, P2)
+- Email/WhatsApp reminders beyond the Apps Script email.
 - Import from Google Calendar / iCal; export study plan to calendar.
-- Shared class calendar (one student adds a test, classmates get it).
+- Shared class calendar (one student adds a test, classmates get it) — needs a backend and a privacy review.
 - Parent read-only view.
-- Weekly summary report ("You studied 6h 30m, 2 tasks missed").
-- Topic templates for common bagrut subjects.
+- Topic templates for common bagrut subjects (maintained content; see Decision D1).
 - Light theme.
+
+### 3.3 Expanded student features
+
+| # | Feature | Priority | What it does |
+|---|---|---|---|
+| S1 | **Today's Mission** | P0 | The top **3 tasks** for today, chosen automatically by urgency × subject weakness × topic confidence (§9.14). A single, finishable list instead of a long plan. Completing all three shows a small celebration and counts for the streak. |
+| S2 | **Test-cluster warning** | P0 | Detects tests bunched together (e.g., 3 tests in 4 days) and shows "start by <date>" with the workload (§9.13). Appears on the dashboard and in the 7-day notice. |
+| S3 | **Exam prep checklist** | P1 | Per exam: topics to tick off, plus a "what to bring" checklist (calculator, formula sheet, ID for bagrut). Checklist items are local. |
+| S4 | **Post-exam reflection** | P1 | After the test date passes: "How did it go?" — expected score, how prepared felt, one thing to do differently. When the real grade appears in the sheet, the app compares it with the expectation (private, never shared). |
+| S5 | **Topic confidence rating** | P1 | Student rates each topic 1–5. Low-confidence topics get more time in the plan and rank higher in Today's Mission. |
+| S6 | **Spaced revision** | P1 | Auto-adds short revision tasks +1, +3 and +7 days after finishing a topic, if before the exam (§9.15). |
+| S7 | **Streaks & weekly goal** | P1 | A day counts when the student logs ≥ 20 min or finishes a Mission task. One automatic "freeze" per week. Streaks **pause** rather than "break"; wording stays encouraging (§9.15). Weekly goal default 5 h, configurable. |
+| S8 | **Focus timer** | P1 | Pomodoro 25/5 (configurable) tied to the study log; screen-friendly full-screen mode; optional chime. |
+| S9 | **Catch-up mode** | P1 | After ≥ 2 missed days or a "Behind" status, offers a lighter re-plan ("Keep it small: 3 × 20 min today"). |
+| S10 | **Achievements** | P2 | Quiet badges (first week streak, all Mission tasks done, grade improvement) — never tied to grade values alone. |
+| S11 | **Quiet mode** | P1 | One toggle that silences everything except the mandatory 7-day notice for the next 24 h (e.g., during a holiday). |
+
+### 3.4 Smarter analytics
+
+| # | Insight | Priority | Rule (details and worked examples in §9) |
+|---|---|---|---|
+| A1 | **Weak-subject detection** | P0 | A subject is flagged when its average is below 70, its recent trend is falling, or it is more than 5 points below the student's target (§9.9). |
+| A2 | **Grade trend** | P0 | Rising / stable / falling from a regression slope over the last up to 5 grades; needs ≥ 3 grades (§9.10). |
+| A3 | **Predicted final grade** | P1 | A **range** (low–high), not a single number, shown only when the sheet provides how much grade weight remains (§9.11). |
+| A4 | **Bagrut readiness score** | P1 | 0–100 per bagrut subject from current average, study time done vs needed, and topic coverage, with the breakdown visible (§9.12). |
+| A5 | **What-if calculator** | P1 | "If I get X on the next test, my average becomes Y" and "What do I need to reach my target?" (extends §9.6). For bagrut: the exam grade needed to reach a target final grade (§9.8). |
+| A6 | **Workload heat map** | P1 | Test density per week; highlights heavy weeks early (§9.13). |
+| A7 | **Study-vs-grade insight** | P2 | Shown only with ≥ 5 (study hours, grade) pairs. Labeled as a *pattern*, never as cause; can be hidden in Settings. |
+| A8 | **Bagrut average** | P1 | Average across bagrut subjects weighted by units (§9.8). |
+
+Guardrails for analytics: always show the number of grades used; never show a prediction or trend with too little data; no comparisons with other students; low-grade states use supportive wording ("This one needs some attention").
 
 ---
 
@@ -161,15 +203,15 @@ The dashboard is the home screen. Widgets are cards on a responsive grid (12 col
 | # | Widget | Content | Notes |
 |---|---|---|---|
 | 1 | **Next exam hero card** | Subject, title, date, lesson slot (from schedule), big countdown (d/h/m), readiness badge, "Start studying" button | Largest card; accent gradient border matching urgency |
-| 2 | **One-week notice banner** | "Tests in the next 7 days" — every test that has entered its 7-day window, with days left and hours free to study | Shown at the top while at least one test is ≤ 7 days away; dismissible per session, never removed from the exam list |
+| 2 | **One-week notice banner** | "Tests in the next 7 days" — every test that has entered its 7-day window, with days left and hours free to study; includes test-cluster warning when relevant | Shown at the top while at least one test is ≤ 7 days away; dismissible per session, never removed from the exam list |
 | 3 | **Today's schedule** | Today's lessons in order (time, subject, room), current/next lesson highlighted, tests of the day flagged | Driven by the **Schedule** tab; empty on days off |
-| 4 | **Countdown strip** | Horizontally scrollable chips of the next 5–6 exams with days left | Click to open exam details |
-| 5 | **Today's plan** | Checklist of today's study tasks with duration; total hours planned vs. done | Progress ring for the day |
-| 6 | **Grades overview** | Overall average (large number) + one row per subject with its average, trend arrow and mini sparkline | Sorted by subject or by lowest average; tap for grade history |
+| 4 | **Today's Mission** | Up to 3 tasks with duration, start button, streak flame and weekly-goal ring | Replaces a long checklist on small screens |
+| 5 | **Countdown strip** | Horizontally scrollable chips of the next 5–6 exams with days left | Click to open exam details |
+| 6 | **Grades overview** | Overall average (large number) + one row per subject with its average, trend arrow and mini sparkline; weak subjects marked | Sorted by subject or by lowest average; tap for grade history |
 | 7 | **This week** | Mini week agenda: lessons, exams, tasks, blocked days | Links to full calendar |
 | 8 | **Study hours** | Bar chart: hours studied per day this week vs. goal | Recharts |
 | 9 | **Subject readiness** | One row per subject: progress bar of (logged ÷ needed) with status color | Sorted by urgency |
-| 10 | **Bagrut tracker** | List of bagrut subjects, units, moed dates, done/remaining, current average | Hidden if the student has no bagrut exams |
+| 10 | **Bagrut tracker** | List of bagrut subjects, units, moed dates, done/remaining, current average, readiness score | Hidden if the student has no bagrut exams |
 | 11 | **Quick add** | Floating "+" button: add local exam / log session / add task | Always visible |
 
 **Header:** logo, language toggle (HE/EN), **sync status ("Updated 3 min ago" + Refresh)**, notifications bell, avatar/settings.
@@ -177,18 +219,97 @@ The dashboard is the home screen. Widgets are cards on a responsive grid (12 col
 
 **Empty states:** friendly illustration + one clear call to action ("Connect your Google Sheet" / "Add your first exam").
 
+### 4.1 Screen specifications
+
+Common to every screen:
+- **States:** *loading* (skeleton cards, never a blank page), *empty* (illustration + one action), *error* (what happened + one recovery action), *offline* (cached data + "last updated" label).
+- **Mobile-first:** one column under 768 px, sticky bottom nav, 16 px gutters; desktop uses the 12-column grid.
+- **RTL:** all layouts flip via logical properties (§7). Copy below shows **EN / HE**. Hebrew copy is gender-neutral (nouns, infinitives, "יש לך").
+
+#### 4.1.1 Onboarding (first run)
+- **Steps (4 screens, skippable where possible):** 1) language → 2) grade level (ז–יב) → 3) connect the Google Sheet (or "Open the template") → 4) notifications and channel choice, with a short explanation of the mandatory 7-day notice.
+- **Layout:** centered card, progress dots, one primary button.
+- **Copy:** "Connect your Google Sheet" / "חיבור גיליון Google"; "Use the template" / "שימוש בתבנית"; "You'll get a notice 7 days before every test" / "תישלח התראה 7 ימים לפני כל מבחן".
+- **Errors:** wrong sheet structure → list of missing tabs/columns with a link to the template ("Missing tab: Exams" / "חסרה לשונית: Exams").
+
+#### 4.1.2 Dashboard
+- Widgets per §4 table. Above the fold on mobile: greeting, notice banner (if any), hero card, Today's Mission.
+- **Greeting:** "Good evening" / "ערב טוב" (no name required).
+- **Empty:** "No sheet connected yet" / "עדיין לא חובר גיליון" + button "Connect" / "חיבור".
+- **Banner copy:** "3 tests in the next 7 days" / "3 מבחנים בשבוע הקרוב"; cluster: "3 tests in 4 days — start by Sun 21 Sep" / "3 מבחנים ב-4 ימים — כדאי להתחיל עד יום א׳, 21.9".
+- **Readiness badges:** On track / בקצב טוב · Tight / צפוף · Behind / בפיגור (always icon + text).
+
+#### 4.1.3 Schedule
+- **Purpose:** the weekly timetable and today's context.
+- **Layout:** desktop — weekly grid (rows = periods, columns = school days, RTL order in Hebrew); mobile — day tabs with a vertical list. Tests appear as colored tags on their lesson slot; current lesson highlighted.
+- **Interactions:** tap a lesson → drawer with subject, room, teacher, upcoming test for that subject, and grades summary.
+- **States:** no schedule tab → "Add a Schedule tab to see your timetable" / "יש להוסיף לשונית Schedule כדי לראות מערכת שעות". Day off → "No lessons today" / "אין שיעורים היום" + free study time.
+
+#### 4.1.4 Calendar
+- **Purpose:** planning across weeks; lessons + tests + tasks + blocks.
+- **Layout:** week view (default) and month view; optional heat-map toggle; legend by subject color.
+- **Interactions:** drag a study task to another day (blocked if it exceeds that day's cap, with a message); tap a test → Exam detail.
+- **Copy:** "Heavy week: 3 tests" / "שבוע עמוס: 3 מבחנים".
+
+#### 4.1.5 Exams list
+- **Layout:** filter chips (All / This week / This month / Bagrut / Done), sortable list; each row = subject color, title, type, date, countdown chip, readiness badge, source tag ("Sheet"/"Local").
+- **Empty:** "No tests yet — add one in your sheet" / "אין מבחנים עדיין — אפשר להוסיף בגיליון".
+- **Actions:** Add local test (P1), open detail.
+
+#### 4.1.6 Exam detail
+- **Header:** subject, title, type/moed, date, lesson slot, big countdown.
+- **Sections:** readiness card (available / needed / logged, formula on tap) · study plan (task list, move/skip/regenerate) · topics with confidence sliders and progress · prep checklist · reminders (7-day notice always on; other lead times toggles) · notes · after the date: post-exam reflection and actual grade when it appears.
+- **Copy:** "Time available 9h · needed 12h · logged 3h" / "זמן פנוי 9 ש׳ · נדרש 12 ש׳ · נלמד 3 ש׳"; behind: "Add 25 min a day to catch up" / "כדאי להוסיף 25 דקות ביום כדי להשלים פערים".
+
+#### 4.1.7 Grades overview
+- **Header:** overall average (large), bagrut average (units-weighted, if applicable), number of grades, last-updated.
+- **List:** one card per subject: average, trend arrow, sparkline, weak-subject tag, target progress.
+- **Sorting:** by name / lowest average / most recent change.
+- **Empty:** "No grades yet" / "עדיין אין ציונים". Single grade: no trend shown.
+- **Info button** on every number → "How is this calculated?" bottom sheet (§9.6).
+
+#### 4.1.8 Subject detail (grades)
+- **Layout:** line chart of grades over time (reading direction follows language), table of grades (date, title, grade, weight), stats (avg, weighted avg, min, max, trend).
+- **Tools:** target-average input → "grade needed on the next test"; what-if slider ("If I get 85…"); for bagrut subjects: final-grade calculator with school/exam weights (§9.8) and predicted final range (§9.11) when data allows.
+- **Copy:** "You need 88 on the next test to reach 85" / "כדי להגיע ל-85 נדרש ציון 88 במבחן הבא"; unreachable: "Not reachable with one test" / "אי אפשר להגיע ליעד עם מבחן אחד".
+
+#### 4.1.9 Study log & timer
+- **Layout:** timer card (subject picker, topic picker, Start), today's sessions, week chart, streak and weekly goal.
+- **Timer:** focus 25 / break 5 by default; continues in background; end-of-session prompt "Log 25 min for Math?" / "לתעד 25 דקות במתמטיקה?".
+- **Manual entry:** subject, topic, duration, date.
+
+#### 4.1.10 Notification center
+- **List** of every notice with type (7-day, day-before, digest, cluster), test, time sent, channel.
+- **Settings shortcut:** channels, quiet hours, quiet mode.
+- **Empty:** "No notices yet" / "אין התראות עדיין".
+
+#### 4.1.11 Settings & Sheet connection
+- **Sections:** Language · Google Sheet (status, last sync, change sheet, disconnect + wipe cache) · Notifications (channels, notice time, quiet hours, digest) · Study (daily cap, weekly goal, availability override, school days incl. Friday) · Grades (scale, pass mark, weighting, targets, bagrut school/exam split) · Privacy (what is read, export/import backup, delete local data).
+- **Sheet status copy:** "Connected — Updated 3 min ago" / "מחובר — עודכן לפני 3 דקות"; error: "No access to the sheet" / "אין גישה לגיליון" + "Reconnect" / "חיבור מחדש".
+
+#### 4.1.12 Sync issues
+- **Layout:** table (tab, row number, problem, how to fix); "Open sheet" button; count badge in the header when > 0.
+- **Copy:** "2 rows need fixing" / "2 שורות דורשות תיקון"; example: "Exams, row 7: date not recognized" / "Exams, שורה 7: התאריך לא זוהה".
+- Rows can be re-checked with "Refresh"; fixed rows disappear automatically.
+
+#### 4.1.13 Bagrut tracker
+- **Layout:** table/cards per bagrut subject: units, school grade (ציון מגן), moed A/B dates, exam grade (when known), final grade calculator, readiness score with breakdown, topic coverage bar.
+- **Summary row:** bagrut average weighted by units (§9.8).
+- **Empty / non-bagrut students:** screen hidden from navigation.
+
 ---
 
 ## 5. Key User Flows
 
 1. **First run:** choose language → connect Google Sheet (or open the template) → data loads → allow notifications → land on dashboard with today's schedule, countdowns and grade averages.
 2. **New test appears in the sheet:** next sync picks it up → dashboard shows it → if ≤ 7 days away a notice fires now, otherwise it fires exactly 7 days before → plan generated from free time in the schedule.
-3. **Seven days before a test:** push/in-app notice with days left and study hours available → tap → exam details with plan → accept or adjust plan.
-4. **Daily use:** open dashboard → check Today's schedule and Today's plan → tick tasks / start timer → see readiness update.
-5. **Falling behind:** dashboard flags "Behind" → tap → "Rebalance plan" suggests extra time per day → accept.
+3. **Seven days before a test:** in-app banner / email / push with days left and study hours available → tap → exam details with plan → accept or adjust plan.
+4. **Daily use:** open dashboard → check Today's schedule and Today's Mission → start timer → finish tasks → see readiness and streak update.
+5. **Falling behind:** dashboard flags "Behind" → tap → "Rebalance plan" suggests extra time per day → accept (or use catch-up mode).
 6. **Exam date changes in the sheet:** next sync updates the exam → plan and reminders (including the 7-day notice) regenerate automatically.
-7. **New grade added in the sheet:** next sync updates that subject's average and trend; a toast shows "Math average: 87.4 (+1.2)".
+7. **New grade added in the sheet:** next sync updates that subject's average and trend; a toast shows "Math average: 87.4 (+1.2)"; post-exam reflection is compared with the real grade.
 8. **Sheet problem:** invalid rows or lost access → "Sync issues" panel explains what to fix; cached data stays visible.
+9. **Heavy week ahead:** cluster detected → banner suggests a start date → student accepts → plan starts earlier.
 
 ---
 
@@ -240,17 +361,18 @@ Subject colors: a fixed 10-color palette of medium-saturation hues, all tested a
 Readiness status uses `--ok` / `--warn` / `--urgent` **plus an icon and label**, never color alone.
 
 ### 6.5 Components
-Card, stat tile, countdown, progress bar, progress ring, chip, checklist item, modal/sheet, toast, form controls, tabs, sidebar, bottom nav, empty state, calendar cell.
+Card, stat tile, countdown, progress bar, progress ring, chip, checklist item, modal/sheet, toast, form controls, tabs, sidebar, bottom nav, empty state, calendar cell, timetable cell, sparkline, heat-map cell, streak flame, notice banner, info ("how is this calculated?") bottom sheet.
 
 ### 6.6 Motion
-- 150–250 ms ease-out transitions; number count-up on load; check-off animation on tasks.
-- Honor `prefers-reduced-motion`: disable pulse/count-up.
+- 150–250 ms ease-out transitions; number count-up on load; check-off animation on tasks; small confetti when all Mission tasks are done.
+- Honor `prefers-reduced-motion`: disable pulse/count-up/confetti.
 
 ### 6.7 Accessibility
 - WCAG AA contrast (≥ 4.5:1 body text, ≥ 3:1 large text/UI).
 - Visible focus ring using `--primary-glow`.
 - Full keyboard navigation; ARIA labels on countdowns (announce as "in 3 days, 4 hours").
 - Touch targets ≥ 44px.
+- Charts have a text/table alternative.
 
 ---
 
@@ -259,88 +381,132 @@ Card, stat tile, countdown, progress bar, progress ring, chip, checklist item, m
 - **Toggle** in header and settings; choice persisted; default from browser language.
 - **Direction:** `dir="rtl"` for Hebrew, `dir="ltr"` for English, set on `<html>`.
 - Use **CSS logical properties** (`margin-inline-start`, `padding-inline-end`, `inset-inline`) instead of left/right so layouts flip automatically.
-- Mirror direction-sensitive icons (arrows, chevrons); do **not** mirror numbers, charts' time axis semantics need explicit decision (charts flow in reading direction).
+- Mirror direction-sensitive icons (arrows, chevrons); do **not** mirror numbers, clocks or media controls.
+- **Charts:** the time axis runs in the reading direction (right-to-left in Hebrew); numbers and tick labels stay left-to-right.
 - Sidebar moves to the right in RTL; progress bars fill from the reading-start side.
-- **Dates & numbers:** `Intl.DateTimeFormat` / `date-fns` locale (`he`, `en`); week starts Sunday by default in Hebrew.
+- **Dates & numbers:** `Intl.DateTimeFormat` / `date-fns` locale (`he`, `en`); week starts Sunday by default.
 - Optional display of the Hebrew calendar date (setting, off by default).
-- All strings in translation files (`locales/he.json`, `locales/en.json`); no hard-coded text; pluralization via i18next (Hebrew has distinct plural forms).
+- All strings in translation files (`locales/he.json`, `locales/en.json`); no hard-coded text; pluralization via i18next (Hebrew has distinct plural forms, including a dual for some nouns, e.g., "יומיים").
 - Mixed-direction text (English subject names inside Hebrew UI) wrapped with `<bdi>` to avoid punctuation flipping.
+- **Gender-neutral Hebrew copy:** prefer nouns, infinitives and "יש לך" over gendered verb forms; avoid addressing the student as male or female.
+- Sheet headers may be Hebrew or English (alias table) so a Hebrew-speaking student can name columns naturally.
+
+### 7.1 Israeli school specifics
+
+| Topic | Spec |
+|---|---|
+| **Terminology** | בוחן = quiz; מבחן = test; בחינה = exam; בגרות = matriculation; מועד א׳ / מועד ב׳ = first / second sitting; ציון מגן = school ("shield") grade; יחידות לימוד = study units; תעודת בגרות = matriculation certificate. The UI uses these Hebrew terms in Hebrew mode. |
+| **Grade levels** | Middle school ז–ט (7–9), high school י–יב (10–12). The level selects sensible defaults (e.g., bagrut tracker visible from י). |
+| **Grade scale** | 0–100 by default. |
+| **Pass mark** | Default **55** (widely cited for bagrut exams), configurable per subject because schools vary. |
+| **Bagrut final grade** | Each bagrut subject's final grade combines the school grade and the exam grade. **The split is a per-subject setting (`schoolWeight`), not hard-coded.** Sources found while researching disagreed (50/50 vs. 30/70 school/exam), and the Ministry booklet consulted did not state it; the split must be confirmed against the current Ministry of Education circular for each subject before release (see Decision D9 and §14). |
+| **Study units** | Bagrut subjects are studied at 3, 4 or 5 units (2 in some subjects). The bagrut average is weighted by units (§9.8). University-admission bonuses for 4/5-unit subjects are **out of scope**. |
+| **Bagrut sittings** | Moed A / Moed B dates are published by the Ministry; the student (or teacher) enters them in the Exams tab. Exams with `type = bagrut` carry a `moed` value; both sittings of a subject share a `moedGroup` so the app can show that Moed B is a retake. |
+| **Core bagrut subjects** | Commonly cited compulsory areas include Hebrew, English, Mathematics, Tanakh (Bible), Literature, History and Civics. The list **must be verified** with the Ministry before being used for any "missing requirement" feature; v1 does not warn about missing requirements. |
+| **School week** | Sunday–Thursday full days; Friday is a short day or off depending on the school — configurable (School / Short / Off). Weekend for planning is Friday-evening to Saturday. |
+| **Holidays & vacations** | Entered in the **Holidays** tab (date, name, type `off`/`short`); they become free study days and are excluded from "school day" logic. Optional Hebrew-date display (§7). |
+| **Time zone** | `Asia/Jerusalem`; Daylight Saving changes are handled via IANA time zone data, never fixed UTC offsets. |
+| **Calendar naming** | Weekdays shown as "יום א׳ … שבת" in Hebrew; dates as `28.9` (day.month) in Hebrew mode. |
 
 ---
 
 ## 8. Data Model
 
-Entities and key fields (types are indicative).
+Entities and key fields (types are indicative). Entities marked **(sheet)** come from Google Sheets and are read-only; the rest are **local** to the device in v1 (see Decision D2 for the consequences).
 
 ```
-User
-  id, displayName, language ("he"|"en"), gradeLevel, createdAt
+User (local)
+  id, displayName?, language ("he"|"en"), gradeLevel, createdAt
 
-Settings
-  userId, dailyStudyCapMinutes, weekStartsOn, quietHoursStart, quietHoursEnd,
-  dailyReminderTime, defaultLeadTimes[], showHebrewDate
+Settings (local)
+  userId, dailyStudyCapMinutes, weeklyGoalMinutes, weekStartsOn, fridayMode ("school"|"short"|"off"),
+  quietHoursStart, quietHoursEnd, noticeTime (default 16:00), dailyReminderTime,
+  defaultLeadTimes[], channels{inApp, email, push}, digest ("off"|"weekly"),
+  showHebrewDate, gradeScaleMax (default 100), passMark (default 55), weightByUnits
 
 SheetConnection             // the linked Google Spreadsheet
-  userId, spreadsheetId, authMode ("oauth"|"public_csv"), lastSyncAt,
-  status ("ok"|"error"|"no_access"), lastError?
+  userId, spreadsheetId, authMode ("picker_drive_file"|"spreadsheets_readonly"|"public_csv"),
+  lastSyncAt, status ("ok"|"error"|"no_access"), lastError?
 
 SyncIssue                   // row-level problems found during sync
   id, tab, rowNumber, message, detectedAt
 
-ScheduleEntry               // weekly timetable, from the Schedule tab
+ScheduleEntry (sheet)       // weekly timetable, from the Schedule tab
   id, weekday (0-6), period, startTime, endTime, subjectId?, room?, teacher?,
-  type ("lesson"|"off"), validFrom?, validTo?
+  type ("lesson"|"off"), validFrom?, validTo?, date? (one-off override)
 
-AvailabilitySlot            // free study time; derived from ScheduleEntry, editable
+Holiday (sheet)             // from the Holidays tab
+  id, date, name, type ("off"|"short")
+
+AvailabilitySlot (local)    // free study time; derived from ScheduleEntry, editable
   userId, weekday (0-6), startTime, endTime, source ("schedule"|"manual")
 
-BlockedTime                 // one-off unavailable time
+BlockedTime (local)         // one-off unavailable time
   userId, start, end, reason
 
-Subject
-  id, userId, name, color, units? (bagrut), isBagrut, targetAverage?
+Subject (sheet)
+  id, name, color, units? (bagrut), isBagrut, targetAverage?,
+  schoolWeight? (0-1, bagrut), remainingWeight? (grade weight still to come), passMark?
 
-Exam
-  id, userId, subjectId, title, type ("quiz"|"test"|"exam"|"project"|"bagrut"),
-  moed? ("A"|"B"), startsAt, weight (1-5), difficulty (1-5),
+Exam (sheet, or local)
+  id, subjectId, title, type ("quiz"|"test"|"exam"|"project"|"bagrut"),
+  moed? ("A"|"B"), moedGroup?, startsAt, weight (1-5), difficulty (1-5),
   recommendedMinutes (computed, overridable), notes, status ("upcoming"|"done"),
-  score?, source ("sheet"|"local"), sheetRowKey?, scheduleEntryId? (matched lesson slot)
+  source ("sheet"|"local"), sheetRowKey?, scheduleEntryId? (matched lesson slot)
 
-Grade                       // from the Grades tab
+Grade (sheet)               // from the Grades tab
   id, subjectId, value, scaleMax (default 100), weight (default 1), date, title?,
-  type?, source ("sheet"|"local"), sheetRowKey?
+  type? ("test"|"quiz"|"bagrut_exam"|"school"|...), source ("sheet"|"local"), sheetRowKey?
 
-Topic
-  id, examId, title, estimatedMinutes, status ("todo"|"in_progress"|"done")
+Topic (sheet or local)      // from the Topics tab or added locally
+  id, examId?, subjectId, title, estimatedMinutes, sheetRowKey?
 
-StudyTask                   // generated or manual plan item
-  id, examId, topicId?, date, plannedMinutes, status ("planned"|"done"|"skipped")
+TopicProgress (local)
+  topicId, status ("todo"|"in_progress"|"done"), confidence (1-5)?, completedAt?
 
-StudySession                // actual time logged
-  id, userId, subjectId, examId?, topicId?, startedAt, durationMinutes
+StudyTask (local)           // generated or manual plan item
+  id, examId, topicId?, date, plannedMinutes, kind ("study"|"revision"), status ("planned"|"done"|"skipped")
 
-Reminder
+StudySession (local)        // actual time logged
+  id, subjectId, examId?, topicId?, startedAt, durationMinutes
+
+Reflection (local)          // post-exam reflection
+  examId, expectedScore?, feltPrepared (1-5)?, note?, createdAt
+
+Streak (local)
+  currentDays, longestDays, lastCountedDate, freezeUsedOn?
+
+Goal (local)
+  weekStart, targetMinutes, loggedMinutes
+
+Reminder (local)
   id, examId, kind ("week_before"|"custom"|"day_before"|"morning_of"|"hour_before"),
-  fireAt, channel ("in_app"|"push"), sentAt?
+  fireAt, channel ("in_app"|"email"|"push"), sentAt?
+
+Notification (local)        // what the notification center lists
+  id, kind ("week_before"|"cluster"|"digest"|"daily"|...), examIds[], body, createdAt, readAt?
 ```
 
-**Relationships:** User 1—1 SheetConnection; User 1—* Subject 1—* Exam 1—* Topic; Subject 1—* Grade; Subject 1—* ScheduleEntry; Exam *—1 ScheduleEntry (matched lesson); Exam 1—* StudyTask; User 1—* StudySession; Exam 1—* Reminder (always includes one `week_before`).
+**Relationships:** User 1—1 SheetConnection; Subject 1—* Exam 1—* Topic; Subject 1—* Grade; Subject 1—* ScheduleEntry; Exam *—1 ScheduleEntry (matched lesson); Exam 1—* StudyTask; Topic 1—1 TopicProgress; User 1—* StudySession; Exam 1—* Reminder (always includes one `week_before`); Exam 1—1 Reflection.
 
 ### 8.1 Google Sheet template
 
-One spreadsheet per student (see Open Questions). Row 1 of every tab is a header; header names are matched case-insensitively and may be Hebrew or English (aliases table in the code). Dates use `YYYY-MM-DD` (or the sheet's native date format), times `HH:MM`.
+One spreadsheet per student (Decision D8). Row 1 of every tab is a header; header names are matched case-insensitively and may be Hebrew or English (aliases table in the code). Dates use `YYYY-MM-DD` (or the sheet's native date format), times `HH:MM`.
 
 | Tab | Columns | Notes |
 |---|---|---|
-| **Schedule** | `weekday`, `period`, `start`, `end`, `subject`, `room`, `teacher`, `type` | `weekday` 1–7 (Sun–Sat) or name; `type` = `lesson` (default) or `off` |
-| **Exams** | `date`, `time`, `subject`, `title`, `type`, `weight`, `difficulty`, `topics`, `notes` | `type` = quiz/test/exam/project/bagrut; `topics` comma-separated; `weight` and `difficulty` optional (default 3) |
-| **Grades** | `date`, `subject`, `title`, `grade`, `weight` | `grade` numeric; `weight` optional (default 1) |
-| **Subjects** *(optional)* | `name`, `color`, `units`, `isBagrut`, `targetAverage` | If missing, subjects are created from names found in other tabs |
+| **Schedule** | `weekday`, `period`, `start`, `end`, `subject`, `room`, `teacher`, `type`, `date`, `validFrom`, `validTo` | `weekday` 1–7 (Sun–Sat) or name; `type` = `lesson` (default) or `off`; `date` (optional) makes the row a one-off override for that day; `validFrom`/`validTo` (optional) limit a row to a semester |
+| **Exams** | `date`, `time`, `subject`, `title`, `type`, `moed`, `weight`, `difficulty`, `topics`, `notes` | `type` = quiz/test/exam/project/bagrut; `moed` = A/B (bagrut); `topics` comma-separated; `weight` and `difficulty` optional (default 3) |
+| **Grades** | `date`, `subject`, `title`, `grade`, `weight`, `type` | `grade` numeric; `weight` optional (default 1); `type` optional |
+| **Subjects** *(optional)* | `name`, `color`, `units`, `isBagrut`, `targetAverage`, `schoolWeight`, `remainingWeight`, `passMark` | If missing, subjects are created from names found in other tabs. `schoolWeight` is 0–1 (or a percentage) |
+| **Topics** *(optional)* | `subject`, `exam`, `topic`, `estimatedMinutes` | Gives the plan generator real topics; `exam` is the exam title (optional) |
+| **Holidays** *(optional)* | `date`, `name`, `type` | `type` = `off` or `short` |
 
 Rules:
 - Subject names are matched exactly (after trimming and case-folding) across tabs; unknown names are reported in Sync issues.
 - Each row gets a stable key (`tab + row number + hash of subject/date/title`) so edits update the same record rather than creating duplicates.
 - Empty rows are ignored; invalid rows are skipped and reported, never crash the sync.
+- A `weight` of 0 or negative is invalid (reported); a grade above the scale maximum or below 0 is invalid (reported).
 
 ---
 
@@ -355,6 +521,7 @@ byTopics    = sum(topic.estimatedMinutes) if provided, else base
 needed      = max(byTopics, base) * byType * byDifficulty * (0.8 + 0.1 * weight)
 ```
 User can override `recommendedMinutes` per exam. Constants live in one config file.
+Low-confidence topics (confidence 1–2) add +25% to their `estimatedMinutes`; high-confidence topics (5) subtract 15%.
 
 ### 9.2 Time available
 Free time comes from the **school schedule**:
@@ -365,7 +532,7 @@ freeWindows(day) = [dayStart, dayEnd] − lessons(day) − BlockedTime(day)
 available = Σ over days from now → exam:
               min( minutes(freeWindows(day)) , dailyStudyCapMinutes )
 ```
-Manual `AvailabilitySlot` entries (`source = "manual"`) override the derived windows for that weekday. Days marked `off` in the schedule count as fully free.
+Manual `AvailabilitySlot` entries (`source = "manual"`) override the derived windows for that weekday. Days marked `off` (schedule or Holidays tab) count as fully free; `short` days use their shortened lesson list.
 
 ### 9.3 Readiness
 ```
@@ -381,7 +548,7 @@ extraPerDay = (remainingNeeded − available) / daysLeft   (shown when Behind)
 
 ### 9.4 Plan generation
 1. Collect available days (with minutes) up to the exam; exclude the final 12h before the exam.
-2. Order topics by estimated size (largest first) and by status (skip `done`).
+2. Order topics by estimated size (largest first), then by low confidence, and by status (skip `done`).
 3. Distribute topic minutes across days, chunked to 25–60 min blocks, never exceeding the daily cap.
 4. Reserve the last 1–2 days for revision when time allows.
 5. On missed tasks or date change → regenerate remaining tasks only; keep completed history.
@@ -391,10 +558,11 @@ extraPerDay = (remainingNeeded − available) / daysLeft   (shown when Behind)
   - If that moment is already in the past but the exam is still in the future → `fireAt = now` (fires on the next sync, once).
   - If the exam moves → delete the unsent `week_before`, create a new one; if the old one was already sent, send a new one only when the new date is different and still ≥ 1 day away.
   - Several exams sharing the same `fireAt` day are merged into one notification listing all of them.
-  - The notification body includes readiness from §9.3 (hours free vs. hours needed).
+  - The notification body includes readiness from §9.3 (hours free vs. hours needed) and a cluster warning from §9.13 when relevant.
 - For other lead times: `fireAt = exam.startsAt − leadTime`; skip times in the past.
 - Shift any `fireAt` that falls in quiet hours to the next allowed time (but never after the exam).
 - Store timezone-aware (default `Asia/Jerusalem`); recompute on exam edit.
+- **Guaranteed delivery order for the 7-day notice:** (1) in-app banner and notification-center entry are always created; (2) email via Apps Script and Web Push are added when the student enabled them. A notice is marked `sent` only when its in-app entry exists.
 
 ### 9.6 Grade averages
 For a subject with grades `g₁…gₙ` and weights `w₁…wₙ` (weight defaults to 1):
@@ -403,7 +571,7 @@ simple average   = Σ gᵢ / n                       (all weights empty or equal
 weighted average = Σ (gᵢ · wᵢ) / Σ wᵢ             (any weight present)
 overall average  = mean of subject averages       (default)
                  = Σ (avgₛ · unitsₛ) / Σ unitsₛ   (when "weight by units" is on and units are set)
-trend            = avg(all grades) − avg(all grades except the latest by date)
+trend            = see §9.10
 neededGrade      = (target · (W + w) − Σ gᵢ·wᵢ) / w      (W = Σ wᵢ, w = weight of the next test)
 ```
 - Round for display to **1 decimal**; keep full precision internally.
@@ -411,14 +579,92 @@ neededGrade      = (target · (W + w) − Σ gᵢ·wᵢ) / w      (W = Σ wᵢ, 
 - No grades → `null` ("No grades yet"), never 0. A subject with a single grade shows no trend.
 - `neededGrade > scaleMax` → show "Target not reachable with the next test"; `neededGrade ≤ 0` → "Target already secured".
 - **Worked example:** grades 90 (w=1) and 80 (w=2) → weighted average = (90·1 + 80·2) / 3 = **83.3**; simple average would be 85.0.
+- **Needed-grade example:** grades 90 (w=1), 80 (w=2) → Σg·w = 250, W = 3; target 85 with next test weight 2 → (85·5 − 250) / 2 = **87.5**.
 
 ### 9.7 Sync
-1. Fetch the tabs (Sheets API `values.batchGet` on Schedule, Exams, Grades, Subjects) — one request per sync.
+1. Fetch the tabs (Sheets API `values.batchGet` on Schedule, Exams, Grades, Subjects, Topics, Holidays) — one request per sync.
 2. Parse and validate each row; collect `SyncIssue`s for bad rows.
 3. Upsert records by `sheetRowKey`; delete local copies of `source = "sheet"` rows that vanished from the sheet.
 4. Diff against the previous state: new/changed exams → (re)schedule reminders (§9.5); new grades → recompute averages and toast changes.
 5. Recompute readiness (§9.3) and the plan (§9.4) only for exams affected by the change.
 6. On network/permission failure: keep cached data, set `SheetConnection.status`, retry with exponential backoff (1 → 2 → 5 → 15 min).
+
+### 9.8 Bagrut subject final grade and bagrut average
+```
+finalGrade      = s · schoolGrade + (1 − s) · examGrade         (s = Subject.schoolWeight, 0–1)
+neededExamGrade = (target − s · schoolGrade) / (1 − s)           (s < 1)
+bagrutAverage   = Σ (finalGradeₛ · unitsₛ) / Σ unitsₛ
+```
+- `s` has **no built-in default**: until the student (or the sheet) sets `schoolWeight`, the app shows the calculator with an input and a "verify with your school" note (§7.1).
+- **Worked example (needed exam grade):** school grade 84, `s = 0.3`, target final 85 → (85 − 0.3·84) / 0.7 = 59.8 / 0.7 = **85.4**. With `s = 0.5` the same target needs (85 − 42) / 0.5 = **86.0**.
+- **Worked example (bagrut average):** Math 5 units final 90, English 4 units final 80, Bible 2 units final 70 → (90·5 + 80·4 + 70·2) / 11 = 910 / 11 = **82.7**.
+- Edge cases: `neededExamGrade > 100` → "Not reachable"; a subject without an exam grade yet is excluded from the average and listed as "pending".
+
+### 9.9 Weak-subject detection
+A subject is flagged **weak** when any of these holds (thresholds configurable):
+1. average < **70**;
+2. trend is **falling** (§9.10);
+3. a target is set and average < target − **5**.
+
+Needs ≥ 2 grades (rule 2 needs ≥ 3). **Example:** Math average 66 → weak (rule 1). English average 78, grades 88, 82, 79 → slope −4.5 → weak (rule 2). History average 84 with target 90 → weak (rule 3, 84 < 85).
+The flag only changes ordering and wording ("Needs attention"); it never triggers alerts by itself.
+
+### 9.10 Grade trend
+Linear regression of grade against test index over the **last up to 5 grades** (ordered by date), requires ≥ 3 grades:
+```
+slope = Σ (xᵢ − x̄)(yᵢ − ȳ) / Σ (xᵢ − x̄)²          (x = 1, 2, 3, …)
+label = rising  if slope ≥ +2
+        falling if slope ≤ −2
+        stable  otherwise                            (points per test)
+```
+- **Worked example:** grades 88, 82, 79 → x̄ = 2, ȳ = 83; numerator = (−1)(5) + 0 + (1)(−4) = −9; denominator = 2 → slope = **−4.5** → falling.
+- Fewer than 3 grades → no arrow. The simple "change vs. previous average" shown in toasts (§5) is separate and can appear with 2 grades.
+
+### 9.11 Predicted final grade (range)
+Shown only when `Subject.remainingWeight` (R) is provided in the sheet:
+```
+A = weighted average so far,  W = weight so far
+σ = max(5, standard deviation of the grades)         (points)
+low  = (A·W + max(0, A − σ)·R)   / (W + R)
+high = (A·W + min(scaleMax, A + σ)·R) / (W + R)
+```
+- **Worked example:** A = 80, W = 4, σ = 6, R = 2 → low = (320 + 74·2) / 6 = **78.0**, high = (320 + 86·2) / 6 = **82.0**.
+- Displayed as "Likely 78–82"; never as one exact figure. Hidden when R is missing or there are fewer than 3 grades.
+
+### 9.12 Bagrut readiness score
+```
+gradeScore    = current subject average (0–100), or 50 if no grades yet
+studyScore    = min(1, loggedMinutes / neededMinutes) · 100
+coverageScore = doneTopics / totalTopics · 100            (skipped if there are no topics)
+readiness     = 0.4·gradeScore + 0.3·studyScore + 0.3·coverageScore
+                (if coverage is skipped: 0.55·gradeScore + 0.45·studyScore)
+label         = ≥ 80 "Ready" · 60–79 "Almost there" · < 60 "Needs work"
+```
+- **Worked example:** average 82, logged 6 h of 10 h needed, 5 of 8 topics done → 0.4·82 + 0.3·60 + 0.3·62.5 = 32.8 + 18 + 18.75 = 69.55 → **70**, "Almost there".
+- The three components are always shown next to the score so the student sees what to improve.
+
+### 9.13 Test-cluster detection and workload
+- A **cluster** is ≥ 3 tests within any 4 consecutive calendar days, or ≥ 2 tests on the same day.
+- `suggestedStart = firstTestDate − ceil(Σ neededMinutes / avgDailyAvailableMinutes)` days, never earlier than today.
+- **Worked example:** tests on Sun, Tue and Wed (3 in 4 days), Σ needed = 20 h, average daily availability 2.5 h → 20 / 2.5 = 8 days before Sunday.
+- **Weekly workload** for the heat map: `load = Σ exam.weight` of tests in that Sun–Sat week → levels 0, 1–2 (light), 3–5 (medium), 6+ (heavy).
+
+### 9.14 Today's Mission ranking
+```
+urgency        = 1 / (daysLeft + 1)                       (exam today = 1.0)
+weakness       = (100 − subjectAverage) / 100             (0.5 if no grades)
+confidenceGap  = (5 − topicConfidence) / 4                (0.5 if unrated)
+score          = 0.5·urgency + 0.3·weakness + 0.2·confidenceGap
+```
+- Pick the top 3 tasks whose total minutes fit the daily cap; at most 2 from the same subject.
+- **Worked example:** Task A — exam in 2 days (urgency 0.333), subject average 62 (weakness 0.38), confidence 2 (gap 0.75) → 0.167 + 0.114 + 0.15 = **0.431**. Task B — exam in 6 days (0.143), average 90 (0.10), confidence 4 (0.25) → 0.071 + 0.03 + 0.05 = **0.151**. A ranks first.
+- Recomputed at midnight and after a sync; the student can swap a task (which reranks the rest).
+
+### 9.15 Streaks, weekly goal and spaced revision
+- A day **counts** if logged study time ≥ 20 min **or** ≥ 1 Mission task is completed.
+- `streak` = consecutive counted days (school holidays and configured off-days do not break it). One **freeze** per 7 days is applied automatically; if a day is missed with no freeze available the streak shows as **paused** and restarts at the next counted day (longest streak is kept).
+- **Weekly goal** = Σ session minutes Sun–Sat vs `weeklyGoalMinutes` (default 300).
+- **Spaced revision:** when a topic is marked done on day *d* and the exam is later than *d + 1*, create 15-minute `revision` tasks at *d + 1*, *d + 3*, *d + 7* (only those before the exam; skip days without free time).
 
 ---
 
@@ -429,23 +675,39 @@ neededGrade      = (target · (W + w) − Σ gᵢ·wᵢ) / w      (W = Σ wᵢ, 
 | Framework | **React + TypeScript** with **Vite** | Fast dev, strong typing for the data model |
 | Styling | **Tailwind CSS** with theme tokens as CSS variables | Fast UI work; logical-property utilities support RTL |
 | i18n | **i18next / react-i18next** | Plurals, namespaces, runtime language switch |
-| Dates | **date-fns** (+ `he`, `en` locales) | Lightweight, locale-aware |
+| Dates | **date-fns** (+ `he`, `en` locales), IANA time zones | Lightweight, locale-aware |
 | Charts | **Recharts** | Simple, themeable |
 | State | **Zustand** or React Query for server state | Small and simple |
-| Data source | **Google Sheets API v4**, read-only scope `spreadsheets.readonly`, sign-in with **Google Identity Services** | Works with private sheets; grades are sensitive so the sheet should not need to be public |
+| Data source | **Google Sheets API v4** with **Google Picker** and scope `drive.file`; fallback scope `spreadsheets.readonly`; sign-in with **Google Identity Services** | Narrowest permissions; see §10.1 |
 | Data source (prototype fallback) | Sheet "Publish to web" as CSV, fetched and parsed with **PapaParse** | Fastest way to demo; **not for real grades** (public link) |
-| Persistence (v1) | **Local-first cache:** IndexedDB (Dexie) holding the last sync | Offline display; the sheet stays the source of truth |
-| Backend (later) | **Supabase** or **Firebase** (auth + DB + scheduled jobs + push) | Needed for reliable notifications when the app is closed, and multi-device sync |
-| Notifications | **Web Notifications API + Service Worker**; Web Push via backend | The 7-day notice must reach the student even if the tab is closed |
+| Persistence (v1) | **Local-first cache and progress store:** IndexedDB (Dexie) | Offline display; the sheet stays the source of truth for sheet data |
+| Email notices (v1) | **Google Apps Script** bound to the template sheet, daily time trigger | Sends the 7-day notice by email with no backend; see §10.2 |
+| Backend (later) | **Supabase** or **Firebase** (auth + DB + scheduled jobs + push) | Reliable Web Push, multi-device sync of local progress |
+| Notifications | **Web Notifications API + Service Worker**; Web Push via backend | Best effort while the app is closed |
 | PWA | Installable, offline shell | Students use phones |
 | Testing | **Vitest** + **React Testing Library**, **Playwright** for e2e | Cover algorithms and RTL layouts |
 
-**Google Sheets notes**
-- One `batchGet` call per sync keeps usage far below API quotas (60 read requests/min/user); with a 15-minute interval this is negligible.
-- Without a backend, the browser can only fire the 7-day notice when the app or its service worker gets to run (open tab, installed PWA with periodic sync where supported). A backend with a daily scheduled job is the reliable option — decision recorded in Open Questions.
-- Google Cloud OAuth consent screen and app verification are required before real students can sign in; plan lead time for this.
+### 10.1 Google access and scopes (fact-checked)
+| Option | Classification (per Google docs) | Use |
+|---|---|---|
+| `drive.file` (+ Google Picker) | **Non-sensitive**; Google's documented "narrowest" Drive access | **Recommended.** The student picks the spreadsheet in the Picker and the app can then read that file only. No OAuth app verification needed for a non-sensitive scope. **An early spike (M0) must confirm** that Sheets `values.batchGet` works on a Picker-selected file with this scope. |
+| `spreadsheets.readonly` | **Sensitive** | Fallback if the spike fails. Requires **Google OAuth app verification** (consent screen, privacy policy, possibly a demo video) before students outside the test-user list can sign in. Plan lead time. |
+| `drive.readonly` / `drive` | **Restricted** | **Do not use** — broad access and heavier verification. |
+| Public CSV | No sign-in | Prototype only; anyone with the link sees the grades. |
 
-Alternative if simpler is preferred: plain HTML/CSS/JS with the published-CSV approach for a first prototype.
+Quotas (Google Sheets API): **300 read requests per minute per project** and **60 per minute per user per project**, with **no daily limit** if the per-minute limits are respected. One `batchGet` per sync every 15 minutes is far below this.
+
+### 10.2 Notification reliability (fact-checked)
+| Channel | Works with app closed? | Notes |
+|---|---|---|
+| In-app banner + notification center | No (shown on next open) | **Always created**; the guaranteed fallback for the 7-day notice |
+| **Email via Apps Script** | **Yes** | Daily trigger in the template's script sends the 7-day notice (and optional digest) to the address the student enters; the sheet owner authorizes the script once; subject to Google's Apps Script email quotas. Recommended for v1. |
+| **Web Push** (with a backend) | Yes, when supported | Needs a backend to send. On **iOS/iPadOS 16.4+** it works only for a PWA **installed to the Home Screen**. |
+| **Periodic Background Sync** (no backend) | Partly | **Experimental, Chromium-only, installed PWA only**, and Chrome decides the frequency from site engagement. **Must not be relied on**; treat as a bonus. |
+
+### 10.3 Other notes
+- Without a backend, local progress (tasks, sessions, confidence, streaks) lives in the browser on one device; provide JSON export/import so it can be backed up or moved (Decision D2).
+- Alternative if simpler is preferred: plain HTML/CSS/JS with the published-CSV approach for a first prototype.
 
 ---
 
@@ -455,18 +717,19 @@ Alternative if simpler is preferred: plain HTML/CSS/JS with the published-CSV ap
 - **Performance:** first contentful paint < 2 s on mid-range phone over 4G; dashboard interactive < 3 s.
 - **Offline:** dashboard, exams, and plan usable offline (PWA).
 - **Accessibility:** WCAG 2.1 AA (see §6.7).
-- **Browser support:** latest two versions of Chrome, Safari, Firefox, Edge; iOS Safari 16.4+ for push.
+- **Browser support:** latest two versions of Chrome, Safari, Firefox, Edge; Web Push on iOS requires iOS 16.4+ and an installed PWA.
 - **Privacy & minors:**
   - Collect the minimum data (no real name required, no location).
-  - **Grades are sensitive data about minors:** request only the read-only Sheets scope, read only the tabs listed in §8.1, never share data with third parties, no analytics on grade values.
+  - **Grades are sensitive data about minors:** request the narrowest scope that works (§10.1), read only the tabs listed in §8.1, never share data with third parties, no analytics on grade values.
   - Do not require a public sheet link for real data; if the CSV prototype is used, warn the user that anyone with the link can see the grades.
-  - Data stays on the device (cache) in v1; OAuth tokens kept in memory/secure storage, revocable from Settings ("Disconnect Google Sheet" also wipes the cache).
+  - In v1 there is no server-side storage of grades: data stays in the student's Google account and in the browser cache; OAuth tokens kept in memory/secure storage, revocable from Settings ("Disconnect Google Sheet" also wipes the cache).
   - Clear privacy statement in both languages, including exactly what is read from the sheet.
-  - Before adding accounts/backend: review Israeli Privacy Protection Law and parental-consent requirements for users under 14/16.
+  - Before adding accounts/backend: review Israeli Privacy Protection Law and parental-consent requirements for users under 14/16 (this document is not legal advice).
   - Allow full data export and deletion.
-- **Reliability of reminders:** local scheduling must survive reload; document limits of browser notifications when the browser is closed. The 7-day notice is the highest-priority reminder: it must never be silently dropped (if it cannot be delivered as push, it must appear as an in-app banner on the next open).
+- **Reliability of reminders:** local scheduling must survive reload. The 7-day notice is the highest-priority reminder: it must never be silently dropped — the in-app banner and notification-center entry are always created (§9.5, §10.2).
 - **Sync:** ≤ 15-minute staleness while open; sync of a typical sheet (≤ 500 rows) completes in < 3 s; malformed rows never block the rest of the data.
 - **Sheet permissions:** losing access (revoked, sheet deleted, not shared) shows a clear message with a "Reconnect" action; cached data remains visible.
+- **Google verification lead time:** if the fallback scope (`spreadsheets.readonly`) is required, allow several weeks for OAuth verification before public launch.
 
 ---
 
@@ -474,26 +737,53 @@ Alternative if simpler is preferred: plain HTML/CSS/JS with the published-CSV ap
 
 | Milestone | Scope |
 |---|---|
-| **M0 — Design** | Wireframes for dashboard, calendar, exam form; finalize dark palette; HE/EN copy; **Google Sheet template (Schedule / Exams / Grades / Subjects)** |
-| **M1 — Data & core** | **Google Sheets connection + sync + cache + Sync issues panel**, data model, subjects, exams from sheet, countdown, dashboard hero + countdown strip, **Today's schedule** |
-| **M2 — Planning & grades** | Free time derived from schedule, time-left calculator, readiness status, study plan generator, Today's plan, **grade averages per subject + overall + grades overview widget** |
-| **M3 — Reminders** | **Mandatory 7-day notice for every test** (in-app banner + push), other lead times, quiet hours, grouping/dedup |
-| **M4 — Calendar & logging** | Calendar views (lessons + tests + tasks), drag-to-reschedule, study timer/log, study-hours chart, grade history charts, "what do I need?" helper |
-| **M5 — Polish** | RTL audit, accessibility audit, empty states, PWA/offline, bagrut tracker |
-| **M6+ — Later** | Accounts + sync, streaks, sharing, imports, parent view |
+| **M0 — Design & spikes** | Wireframes for all §4.1 screens; finalize dark palette; HE/EN copy; **Google Sheet template (Schedule / Exams / Grades / Subjects / Topics / Holidays) + Apps Script email**; **spike: Picker + `drive.file` reading a sheet via Sheets API**; confirm Ministry grade rules (D9) |
+| **M1 — Data & core (P0)** | **Google Sheets connection + sync + cache + Sync issues panel**, data model, subjects, exams from sheet, countdown, dashboard hero + countdown strip, **Today's schedule**, onboarding |
+| **M2 — Planning & grades (P0)** | Free time derived from schedule/holidays, time-left calculator, readiness status, study plan generator, **Today's Mission**, **grade averages per subject + overall + grades overview widget**, weak-subject flag, trend |
+| **M3 — Reminders (P0)** | **Mandatory 7-day notice for every test** (in-app banner + notification center + Apps Script email), other lead times, quiet hours, grouping/dedup, test-cluster warning |
+| **M4 — Calendar, logging & analytics (P1)** | Calendar views (lessons + tests + tasks), drag-to-reschedule, study timer/log, study-hours chart, streak + weekly goal, grade history charts, what-if / "what do I need?" helper, workload heat map |
+| **M5 — Bagrut & polish (P1)** | Bagrut tracker (final-grade calculator, unit average, readiness score, predicted range), topic confidence + spaced revision, prep checklist, post-exam reflection, RTL audit, accessibility audit, empty states, PWA/offline, backup export/import |
+| **M6+ — Later (P2)** | Backend + Web Push + multi-device sync, achievements, sharing, imports, parent view, study-vs-grade insight |
 
 ---
 
-## 13. Open Questions
+## 13. Decision Log and Open Items
 
-1. Should the bagrut tracker come with **pre-filled subject/topic templates** (Ministry of Education syllabi), and who maintains them?
-2. Is a **cache-only, no-backend** v1 acceptable? Without a backend the 7-day notice only fires when the app can run; a backend (scheduled job + Web Push) makes it reliable but adds accounts, hosting and privacy obligations.
-3. Minimum age to support without parental consent (privacy law review)?
-4. Should the Hebrew calendar date be shown by default for Hebrew users?
-5. Do we want teachers or schools to be able to push official exam dates to students?
-6. Final product name and logo.
-7. **Who fills the Google Sheet** — the student, a parent, or the school/teacher? This decides who needs edit access and how much validation the template needs.
-8. **One sheet per student** (assumed in §8.1) or one shared sheet with a `student` column (e.g., a class sheet)? The shared option raises privacy concerns because grades of others must not be visible.
-9. **Grade rules:** which scale and weighting does the school use (0–100, weights per test type, bagrut unit weighting, rounding rules)? Should the passing threshold be configurable per subject?
-10. **7-day notice format:** one notification per test (current spec, grouped when on the same day) or a single weekly digest of all tests in the next 7 days? Should tests less than 7 days away at first sync notify immediately (current spec)?
-11. **Schedule changes:** does the timetable change during the year (semester, substitute lessons)? The spec supports `validFrom`/`validTo`, but is that enough?
+Decisions below are **proposed** defaults that resolve the earlier open questions. Change any of them and the affected sections are listed in the last column.
+
+| ID | Question | Proposed decision | Why | Affects |
+|---|---|---|---|---|
+| D1 | Pre-filled bagrut subject/topic templates? | **Not in v1.** Provide an example Topics tab students can copy; revisit once Ministry syllabi ownership is clear. | Content must be accurate and maintained; wrong syllabi would mislead. | §3.2, §8.1 |
+| D2 | Backend in v1? | **No backend.** Reliable 7-day notice through in-app banner + Apps Script email; Web Push best effort. Local progress is per-device, with JSON backup. Add backend in M6+. | Avoids accounts, hosting and minors' data obligations; keeps v1 small. | §10, §11, §9.5 |
+| D3 | Minimum age / consent | Design for students **12+**. Since v1 stores no grades on a server, consent needs are minimized; **get a legal review before any backend or account system.** | Grades are sensitive; laws depend on server-side processing. | §11 |
+| D4 | Hebrew date display | **Off by default**, toggle in Settings. | Most students use the civil date; some want the Hebrew date. | §7 |
+| D5 | Teachers/schools pushing exam dates | No direct integration in v1. A teacher can be given edit access to the student's sheet, or share a class template that students copy. | Keeps grade data private per student. | §3.2, §8.1 |
+| D6 | Product name and logo | **Open** — owner: product owner. | Not a technical decision. | Header, PWA manifest |
+| D7 | Who fills the sheet? | The **student** owns and edits it by default; parents/teachers can be added as editors through normal Google sharing. The app does not care who edits. | Simplest; no roles to build. | F0, §8.1 |
+| D8 | One sheet per student or a class sheet? | **One sheet per student.** Class sheets are out of scope. | A shared sheet would expose other students' grades. | §1.4, §8.1 |
+| D9 | Grade rules and bagrut split | Scale 0–100; weights per grade row; pass mark default 55 (per subject configurable); bagrut `schoolWeight` per subject with **no hard-coded default** until confirmed. **Verify the school/exam split and pass marks against the current Ministry of Education circular before release.** | Research found conflicting splits (50/50 vs. 30/70). | §7.1, §9.8 |
+| D10 | 7-day notice format | **One notice per test, grouped by day** (mandatory) + optional **weekly digest** (P1). Tests already < 7 days away notify once, immediately. | Meets "notice a week before every test" without spamming. | F4, §9.5 |
+| D11 | Timetable changes during the year | `validFrom`/`validTo` for semester changes, a `date` column for one-off overrides, and a Holidays tab. | Covers substitutes and vacations without a complex editor. | §8.1, §9.2 |
+| D12 | Chart direction in Hebrew | Time axis runs in the **reading direction** (right-to-left); numbers stay LTR. | Consistent with the mirrored layout. | §7 |
+
+**Still open (need information from outside this document):**
+1. Exact Ministry of Education rules per bagrut subject (school/exam split, pass marks, moed rules) — confirm and update §7.1/§9.8.
+2. Outcome of the M0 spike: does `drive.file` + Picker work with the Sheets API as expected? If not, the `spreadsheets.readonly` verification path applies.
+3. Legal review for minors' data before any backend (D3).
+4. Product name and logo (D6).
+
+---
+
+## 14. Sources and Verification Log
+
+Checked on 2026-09-20.
+
+| Claim | Source | Result |
+|---|---|---|
+| Sheets API read quotas | [Google Sheets API usage limits](https://developers.google.com/sheets/api/limits) | 300 read requests/min/project, 60/min/user/project, no daily cap. |
+| OAuth scope classification | [Google Sheets API scopes](https://developers.google.com/sheets/api/scopes) | `spreadsheets` and `spreadsheets.readonly` are Sensitive; `drive.file` Non-sensitive; `drive` and `drive.readonly` Restricted. |
+| Periodic Background Sync | [MDN — Periodic Background Synchronization API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Periodic_Background_Synchronization_API) | Experimental, not Baseline; Chrome requires an installed web app and uses site engagement. |
+| Bagrut structure | [Wikipedia — Bagrut certificate](https://en.wikipedia.org/wiki/Bagrut_certificate) and other secondary sources | Pass mark 55 widely cited; school/exam split reported inconsistently (50/50 vs. 30/70) → **not hard-coded**, must be verified. |
+| Ministry booklet | [Ministry of Education 2025 booklet](https://meyda.education.gov.il/files/pop/0files/english/Chativa-Elyona/Bagrut/updates/5pointsbooklet2025.pdf) | Navigational; did not state the grade formula. |
+| iOS Web Push requires installed PWA (16.4+) | Widely documented by Apple/WebKit; **not re-verified in this pass** | Keep the in-app banner and email as the guaranteed channels. |
+| `drive.file` + Picker with Sheets API | Not verified | **M0 spike required.** |
