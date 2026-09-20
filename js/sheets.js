@@ -11,7 +11,18 @@
   const L = SP.logic;
 
   // ---------- CSV ----------
-  function parseCSV(text) {
+  // Files saved from Excel may start with a BOM and use ";" or a tab instead of ","
+  const stripBom = (s) => String(s).replace(/^﻿/, '');
+  function detectDelimiter(text) {
+    const first = stripBom(text).split(/\r?\n/).find((l) => l.trim() !== '') || '';
+    const count = (ch) => first.split(ch).length - 1;
+    const best = [',', ';', '\t'].sort((a, b) => count(b) - count(a))[0];
+    return count(best) > 0 ? best : ',';
+  }
+
+  function parseCSV(text, delim) {
+    text = stripBom(text);
+    delim = delim || ',';
     const rows = [];
     let row = [];
     let field = '';
@@ -25,7 +36,7 @@
         } else if (c === '"') quoted = false;
         else field += c;
       } else if (c === '"') quoted = true;
-      else if (c === ',') {
+      else if (c === delim) {
         row.push(field);
         field = '';
       } else if (c === '\n' || c === '\r') {
@@ -157,26 +168,37 @@
   const sameSubject = (a, b) => norm(a) === norm(b) || (canonicalSubject(a) && canonicalSubject(a) === canonicalSubject(b));
 
   // ---------- 1) personal sheet: normalisation with row-level issues (SPEC F0 "Sync issues") ----------
-  function normalize(tabs) {
+  // Timetable rows (used by the personal sheet's Schedule tab and by the timetable file import)
+  function parseScheduleRows(rows, tabName) {
     const issues = [];
-    const bad = (tab, row, key) => issues.push({ tab, row, key });
-    const subjectNames = new Set();
-
     const schedule = [];
-    for (const r of toObjects(tabs.Schedule || []) || []) {
+    const bad = (row, key) => issues.push({ tab: tabName, row, key });
+    for (const r of toObjects(rows) || []) {
       const wd = r.date ? null : parseWeekday(r.weekday);
       const date = r.date ? parseDate(r.date) : null;
-      if (!wd && !date) { bad('Schedule', r._row, 'badWeekday'); continue; }
+      if (!wd && !date) { bad(r._row, 'badWeekday'); continue; }
       const type = (r.type || 'lesson').toLowerCase() === 'off' ? 'off' : 'lesson';
       const start = parseTime(r.start), end = parseTime(r.end);
-      if (type === 'lesson' && (!start || !end)) { bad('Schedule', r._row, 'badTime'); continue; }
-      if (type === 'lesson' && !r.subject) { bad('Schedule', r._row, 'noSubject'); continue; }
-      if (r.subject) subjectNames.add(r.subject);
+      if (type === 'lesson' && (!start || !end)) { bad(r._row, 'badTime'); continue; }
+      if (type === 'lesson' && L.timeToMin(end) <= L.timeToMin(start)) { bad(r._row, 'badTime'); continue; }
+      if (type === 'lesson' && !r.subject) { bad(r._row, 'noSubject'); continue; }
       schedule.push({
         weekday: wd, date, period: r.period, start, end, subject: r.subject, room: r.room,
         teacher: r.teacher, type, validFrom: parseDate(r.validfrom || '') || null, validTo: parseDate(r.validto || '') || null,
       });
     }
+    return { schedule, issues };
+  }
+
+  function normalize(tabs) {
+    const issues = [];
+    const bad = (tab, row, key) => issues.push({ tab, row, key });
+    const subjectNames = new Set();
+
+    const sched = parseScheduleRows(tabs.Schedule || [], 'Schedule');
+    const schedule = sched.schedule;
+    issues.push(...sched.issues);
+    schedule.forEach((l) => l.subject && subjectNames.add(l.subject));
 
     const exams = [];
     for (const r of toObjects(tabs.Exams || []) || []) {
@@ -393,7 +415,7 @@
   Object.assign(SP, {
     sheets: {
       parseCSV, toObjects, parseDate, parseTime, parseWeekday, normalize, PALETTE, norm, canonicalSubject, sameSubject,
-      parseGradeRows, parseExamCalendar, parseLink, listPublishedTabs, loadSheet, loadSingleTab, fetchRows,
+      parseGradeRows, parseExamCalendar, parseScheduleRows, detectDelimiter, parseLink, listPublishedTabs, loadSheet, loadSingleTab, fetchRows,
       // kept for tests / callers that only need an id
       extractId: (s) => { const l = parseLink(s); return l ? l.id : null; },
     },

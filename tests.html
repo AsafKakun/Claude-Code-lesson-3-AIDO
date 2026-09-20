@@ -197,6 +197,18 @@
     check('different subjects do not match', S.sameSubject('מתמטיקה', 'אנגלית'), false);
     check('blank rows keep row numbers (personal sheet)', S.normalize({ Exams: S.parseCSV('date,subject\n\n2026-10-01,Math\nbad,Math') }).issues.map((i) => i.row), [4]);
 
+    // ---- timetable file import ----
+    check('csv: BOM is stripped', S.parseCSV('﻿weekday,start\n1,08:00')[0][0], 'weekday');
+    check('csv: semicolon delimiter detected', S.detectDelimiter('weekday;start;end\n1;08:00;08:45'), ';');
+    check('csv: comma is the default', S.detectDelimiter('weekday,start,end'), ',');
+    check('csv: tab delimiter detected', S.detectDelimiter('weekday\tstart\tend'), '\t');
+    check('csv: semicolon file parses', S.parseCSV('a;b\n1;2', ';'), [['a', 'b'], ['1', '2']]);
+    const tt = S.parseScheduleRows(S.parseCSV('weekday,period,start,end,subject,room,teacher,type\n1,1,08:45,09:30,פיזיקה,611 ביוטכנולוגיה,גבאי מיכאל,lesson\n2,1,10:00,09:00,מתמטיקה,1,x,lesson\n3,1,08:00,08:45,,1,x,lesson\n9,1,08:00,08:45,אנגלית,1,x,lesson'), 'f.csv');
+    check('timetable: 1 valid lesson', tt.schedule.length, 1);
+    check('timetable: fields read', [tt.schedule[0].weekday, tt.schedule[0].period, tt.schedule[0].start, tt.schedule[0].end, tt.schedule[0].room, tt.schedule[0].teacher], [1, '1', '08:45', '09:30', '611 ביוטכנולוגיה', 'גבאי מיכאל']);
+    check('timetable: end before start / no subject / bad weekday reported', tt.issues.map((i) => i.row + i.key), ['3badTime', '4noSubject', '5badWeekday']);
+    check('timetable: Hebrew weekday headers work', S.parseScheduleRows(S.parseCSV('יום,התחלה,סיום,מקצוע\nא,08:00,08:45,מתמטיקה'), 'f').schedule.length, 1);
+
     // sample data is valid for both languages
     for (const lang of ['en', 'he']) {
       const d = SP.sample.build(new Date(), lang);

@@ -64,6 +64,7 @@ The **+** button opens a menu:
 - **Add lessons** — subject, start/end time, optional room, and **one or several weekdays at once**. Lessons are numbered
   by start time, shown in "Today's schedule", and used for free-study-time. The timetable dialog (✎ on the schedule card)
   lists and deletes hand-entered lessons.
+- **Import a timetable file** — in the timetable dialog (✎ on the schedule card): choose a CSV with the columns `weekday, period, start, end, subject, room, teacher` (`weekday` 1 = Sunday; see [`template/Schedule.csv`](template/Schedule.csv)). UTF-8 or Excel Hebrew (windows-1255) files, with `,` `;` or tab separators, are accepted. Importing again replaces the previously imported lessons; lessons added by hand stay. Rows that cannot be read are listed with their row number.
 - **Add a test** — local test, as before.
 
 Hand-entered data is saved on this device only and is merged with any connected sheets. As soon as something is entered

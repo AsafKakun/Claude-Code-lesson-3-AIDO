@@ -136,7 +136,8 @@
     for (const wd of Object.keys(byDay)) {
       byDay[wd]
         .sort((a, b) => L.timeToMin(a.start) - L.timeToMin(b.start))
-        .forEach((l, i) => out.push({ ...l, date: null, period: String(i + 1), teacher: '', type: 'lesson', validFrom: null, validTo: null, manual: true }));
+        // imported files carry their own period numbers; hand-entered lessons are numbered by start time
+        .forEach((l, i) => out.push({ ...l, date: null, period: l.period || String(i + 1), teacher: l.teacher || '', type: 'lesson', validFrom: null, validTo: null, manual: true }));
     }
     return out;
   }
@@ -496,6 +497,43 @@
     });
   }
 
+  // timetable file (CSV): same columns as the Schedule tab. Re-importing replaces the previously imported lessons.
+  async function readTextFile(file) {
+    let text = await file.text();
+    if (text.includes('�')) text = new TextDecoder('windows-1255').decode(await file.arrayBuffer()); // Excel "Hebrew" CSV
+    return text;
+  }
+
+  async function importTimetable(file) {
+    let html;
+    try {
+      const text = await readTextFile(file);
+      const rows = SH.parseCSV(text, SH.detectDelimiter(text));
+      const r = SH.parseScheduleRows(rows, file.name);
+      const lessons = r.schedule.filter((l) => l.type === 'lesson' && l.weekday); // weekly lessons only
+      if (!lessons.length) {
+        html = `<div class="err-box">${esc(t('noLessonsInFile'))}</div>`;
+      } else {
+        const stamp = Date.now();
+        state.manualLessons = state.manualLessons
+          .filter((l) => l.source !== 'file')
+          .concat(lessons.map((l, i) => ({ id: 'mf' + stamp + '-' + i, source: 'file', weekday: l.weekday, start: l.start, end: l.end, subject: l.subject, room: l.room || '', teacher: l.teacher || '', period: l.period || '' })));
+        store.set('manualLessons', state.manualLessons);
+        bump();
+        render();
+        const issues = r.issues.length
+          ? `<div><b>${esc(t('issuesTitle', { n: r.issues.length }))}</b><ul class="issues">${r.issues.slice(0, 30).map((i) => `<li>${esc(t('row'))} ${i.row}: ${esc(t('issue_' + i.key))}</li>`).join('')}</ul></div>`
+          : '';
+        html = `<div class="ok-box">✓ ${esc(t('imported', { n: lessons.length }))}</div>${issues}`;
+        toast(t('imported', { n: lessons.length }));
+      }
+    } catch (e) {
+      html = `<div class="err-box">${esc(t('fileReadError'))}</div>`;
+    }
+    drafts.importMsg = html;
+    openTimetable();
+  }
+
   // manual timetable: add one lesson to one or several weekdays
   function openTimetable(msg) {
     const d = data();
@@ -518,6 +556,13 @@
       .join('');
     $('#dlgTimetable').innerHTML = `<div class="dlg-body"><h2>${esc(t('timetable'))}</h2>
       ${days || `<div class="empty">${esc(t('noLessonsYet'))}<br>${esc(t('addLessonHint'))}</div>`}
+      <section class="src" style="margin-block-start:8px">
+        <h3>${esc(t('importTimetable'))}</h3>
+        <p class="note">${esc(t('importHelp'))} <a href="template/Schedule.csv" download style="color:var(--accent)">${esc(t('downloadTemplate'))}</a></p>
+        <div class="field"><input id="timetableFile" type="file" accept=".csv,text/csv,text/plain" aria-label="${esc(t('importTimetable'))}"></div>
+        <div id="importMsg">${drafts.importMsg || ''}</div>
+        ${state.manualLessons.some((l) => l.source === 'file') ? `<div class="actions"><button type="button" class="btn btn-danger" data-action="removeImported">${esc(t('removeImported'))}</button></div>` : ''}
+      </section>
       <form id="formLesson" class="src" style="margin-block-start:8px">
         <h3>${esc(t('addLesson'))}</h3>
         <div class="field"><label for="lSubject">${esc(t('fSubject'))}</label><input id="lSubject" list="dlSubjects" maxlength="60" autocomplete="off" required></div>${subjectList()}
@@ -667,7 +712,7 @@
 
   // ---------- data sources dialog ----------
   // drafts keep what the student typed while the dialog is re-rendered
-  const drafts = { url: { calendar: '', grades: '', sheet: '' }, gid: {}, tabs: {}, msg: {} };
+  const drafts = { url: { calendar: '', grades: '', sheet: '' }, gid: {}, tabs: {}, msg: {}, importMsg: '' };
 
   function sourceSummary(kind) {
     const s = state.src[kind];
@@ -869,6 +914,13 @@
       bump();
       render();
       openGrades();
+    } else if (a === 'removeImported') {
+      state.manualLessons = state.manualLessons.filter((l) => l.source !== 'file');
+      store.set('manualLessons', state.manualLessons);
+      drafts.importMsg = '';
+      bump();
+      render();
+      openTimetable();
     } else if (a === 'delLesson') {
       state.manualLessons = state.manualLessons.filter((l) => l.id !== el.dataset.id);
       store.set('manualLessons', state.manualLessons);
@@ -893,6 +945,7 @@
     }
     const tab = ev.target.closest('[data-tab]');
     if (tab) drafts.gid[tab.dataset.tab] = tab.value;
+    if (ev.target.id === 'timetableFile' && ev.target.files[0]) importTimetable(ev.target.files[0]);
   });
   document.addEventListener('input', (ev) => {
     const url = ev.target.closest('[data-url]');
@@ -921,5 +974,5 @@
   setInterval(sync, 15 * 60 * 1000); // SPEC F0: every 15 minutes
   setInterval(render, 30 * 1000); // keep countdowns and "now" fresh
 
-  SP.app = { state, render, data, allExams, todayMission, connectSource, drafts };
+  SP.app = { state, render, data, allExams, todayMission, connectSource, drafts, importTimetable };
 })();
