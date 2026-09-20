@@ -1,0 +1,9 @@
+weekday,period,start,end,subject,room,teacher,type,date,validFrom,validTo
+1,1,08:00,08:45,Math,204,,lesson,,,
+1,2,08:50,09:35,English,117,,lesson,,,
+1,3,09:55,10:40,Literature,117,,lesson,,,
+2,1,08:00,08:45,Physics,Lab 2,,lesson,,,
+2,2,08:50,09:35,Math,204,,lesson,,,
+3,1,08:00,08:45,English,117,,lesson,,,
+4,1,08:00,08:45,History,312,,lesson,,,
+5,1,08:00,08:45,Math,204,,lesson,,,

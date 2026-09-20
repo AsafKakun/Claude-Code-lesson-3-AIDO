@@ -1,0 +1,758 @@
+/* Dashboard UI (SPEC §4): 7-day banner, next-test hero, today's schedule, Today's Mission, header grades chip.
+   Data can come from up to three sources that are merged: a personal sheet, the school's exam calendar,
+   and a grades-only sheet. With no source connected, sample data is shown. */
+(function () {
+  const SP = window.SP;
+  const L = SP.logic;
+  const SH = SP.sheets;
+  const $ = (sel) => document.querySelector(sel);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // ---------- storage (wrapped: may be blocked in private windows) ----------
+  const store = {
+    get(k, def) {
+      try {
+        const v = localStorage.getItem('sp.' + k);
+        return v === null ? def : JSON.parse(v);
+      } catch (e) {
+        return def;
+      }
+    },
+    set(k, v) {
+      try {
+        localStorage.setItem('sp.' + k, JSON.stringify(v));
+      } catch (e) { /* ignore */ }
+    },
+    del(k) {
+      try {
+        localStorage.removeItem('sp.' + k);
+      } catch (e) { /* ignore */ }
+    },
+  };
+
+  const KINDS = ['calendar', 'grades', 'sheet'];
+  // storage keys per source: link config + cached raw rows/tabs (so data stays visible offline, SPEC §11)
+  const CFG = { calendar: 'calendar', grades: 'gradesSrc', sheet: 'sheetLink' };
+  const CACHE = { calendar: 'calendarRows', grades: 'gradesRows', sheet: 'tabs' };
+
+  const legacyId = store.get('sheetId', null); // older builds stored only the sheet id
+  const state = {
+    lang: store.get('lang', (navigator.language || 'en').toLowerCase().startsWith('he') ? 'he' : 'en'),
+    src: {
+      calendar: store.get(CFG.calendar, null), // { input, link, gid, tabName }
+      grades: store.get(CFG.grades, null),
+      sheet: store.get(CFG.sheet, null) || (legacyId ? { input: '', link: { kind: 'sheet', id: legacyId, gid: null } } : null),
+    },
+    parsed: { calendar: null, grades: null, sheet: null }, // { data, issues }
+    errors: { calendar: false, grades: false, sheet: false },
+    lastSync: store.get('lastSync', null),
+    sessions: store.get('sessions', []),
+    localExams: store.get('localExams', []),
+    done: store.get('done', {}),
+    missionIds: store.get('mission', {}),
+    confidence: store.get('confidence', {}),
+    settings: { dailyCapMin: 180, weeklyGoalMin: 300, weakThreshold: 70, showHebrewDate: true },
+    bannerCollapsed: false,
+    rev: 0,
+    memo: null,
+  };
+  let t = SP.i18n.makeT(state.lang);
+  const now = () => new Date();
+  const hasSources = () => KINDS.some((k) => state.src[k]);
+  const anyError = () => KINDS.some((k) => state.errors[k]);
+  const bump = () => {
+    state.rev++;
+    state.memo = null;
+  };
+
+  // ---------- parsing raw rows into data ----------
+  function parseSource(kind, cache) {
+    if (kind === 'sheet') {
+      const r = SH.normalize(cache);
+      return { data: r.data, issues: r.issues };
+    }
+    if (kind === 'calendar') {
+      const r = SH.parseExamCalendar(cache);
+      return { data: { exams: r.exams }, issues: r.issues, missingColumns: r.missingColumns };
+    }
+    const r = SH.parseGradeRows(cache, 'Grades sheet', { canonical: true });
+    return { data: { grades: r.grades }, issues: r.issues, missingColumns: r.missingColumns };
+  }
+
+  function loadCaches() {
+    for (const k of KINDS) {
+      const cache = store.get(CACHE[k], null);
+      if (state.src[k] && cache) state.parsed[k] = parseSource(k, cache);
+    }
+    bump();
+  }
+
+  // ---------- merged data ----------
+  function data() {
+    const key = state.lang + L.ymd(now()) + '#' + state.rev;
+    if (state.memo && state.memo.key === key) return state.memo.value;
+    let value;
+    const p = state.parsed;
+    if (!p.sheet && !p.calendar && !p.grades) {
+      value = SP.sample.build(now(), state.lang);
+      value.isSample = true;
+    } else {
+      const base = p.sheet ? p.sheet.data : { subjects: [], schedule: [], exams: [], grades: [], holidays: [] };
+      const exams = [...base.exams];
+      if (p.calendar) exams.push(...p.calendar.data.exams.filter((c) => !exams.some((e) => e.subject === c.subject && e.date === c.date)));
+      const grades = [...base.grades, ...(p.grades ? p.grades.data.grades : [])];
+      const subjects = base.subjects.map((s) => ({ ...s }));
+      // subjects that only appear in exams / grades get a colour too; names are matched loosely (quotes, niqqud)
+      for (const name of [...exams.map((e) => e.subject), ...grades.map((g) => g.subject)]) {
+        if (!subjects.some((s) => SH.sameSubject(s.name, name))) subjects.push({ name, color: SH.PALETTE[subjects.length % SH.PALETTE.length], targetAverage: null });
+      }
+      // make grade subjects use the same spelling as the exam / schedule subject
+      for (const g of grades) {
+        const s = subjects.find((x) => SH.sameSubject(x.name, g.subject));
+        if (s) g.subject = s.name;
+      }
+      value = { subjects, schedule: base.schedule, holidays: base.holidays, exams, grades, isSample: false };
+    }
+    state.memo = { key, value };
+    return value;
+  }
+
+  const hydrateLocal = (e) => {
+    const startsAt = L.parseYmd(e.date);
+    const [h, m] = e.time.split(':').map(Number);
+    startsAt.setHours(h, m, 0, 0);
+    return { ...e, startsAt, source: 'local' };
+  };
+
+  function allExams() {
+    const d = data();
+    const locals = state.localExams
+      .map(hydrateLocal)
+      .filter((le) => !d.exams.some((se) => se.subject === le.subject && se.date === le.date)); // sheet wins (SPEC F1)
+    return [...d.exams, ...locals];
+  }
+
+  const ctx = () => ({ schedule: data().schedule, holidays: data().holidays, settings: state.settings, sessions: state.sessions });
+  const subjectOf = (name) => data().subjects.find((s) => s.name === name) || { name, color: '#7c6cff' };
+  const color = (name) => subjectOf(name).color || '#7c6cff';
+
+  // ---------- formatting ----------
+  const locale = () => (state.lang === 'he' ? 'he-IL' : 'en-GB');
+  function fmtDate(d, withYear) {
+    const opts = { weekday: 'short', day: 'numeric', month: 'short' };
+    if (withYear) opts.year = 'numeric';
+    let s = new Intl.DateTimeFormat(locale(), opts).format(d);
+    if (state.lang === 'he' && state.settings.showHebrewDate) {
+      s += ' · ' + new Intl.DateTimeFormat('he-u-ca-hebrew', { day: 'numeric', month: 'long' }).format(d);
+    }
+    return s;
+  }
+  const fmtTime = (d) => L.pad(d.getHours()) + ':' + L.pad(d.getMinutes());
+  const dur = (m) => SP.i18n.durationText(m, state.lang);
+  const when = (exam) => SP.i18n.daysPhrase(L.daysBetween(now(), exam.startsAt), state.lang, t);
+  const typeName = (type) => t('types')[type] || type;
+
+  // "Math — Math test" would repeat itself, so show the text alone when it already names the subject
+  function label(subject, text) {
+    return SH.norm(text).includes(SH.norm(subject))
+      ? `<bdi>${esc(text)}</bdi>`
+      : `<bdi>${esc(subject)}</bdi> — <bdi>${esc(text)}</bdi>`;
+  }
+
+  // "1 grade" / "2 grades" / Hebrew "ציון אחד" / "שני ציונים" / "3 ציונים"
+  const countText = (n, key) => (n === 1 ? t(key + 'One') : n === 2 && state.lang === 'he' ? t(key + 'Two') : t(key, { n }));
+
+  function relTime(ms) {
+    const mins = Math.floor((Date.now() - ms) / 60000);
+    if (mins < 1) return t('justNow');
+    if (mins < 60) return mins === 1 ? t('minAgoOne') : t('minAgo', { n: mins });
+    return countText(Math.floor(mins / 60), 'hAgo');
+  }
+
+  function lessonSlot(exam) {
+    const lesson = L.lessonsOn(data().schedule, exam.startsAt, data().holidays).find((l) => l.subject === exam.subject);
+    return lesson && lesson.period ? t('period', { n: lesson.period }) : '';
+  }
+
+  // ---------- render: top bar ----------
+  function renderTop() {
+    const g = L.gradeSummary(data().grades, data().subjects, state.settings);
+    const avg = g.overall !== null ? `<button class="chip chip-avg" data-action="grades" title="${esc(t('avgTitle'))}" aria-label="${esc(t('avgTitle'))}">${esc(t('avg'))} <strong>${g.overall.toFixed(1)}</strong></button>` : '';
+    let status;
+    if (hasSources()) {
+      const cls = anyError() ? ' err' : '';
+      const text = anyError() ? '⚠ ' + t('syncError') : state.lastSync ? t('updated', { t: relTime(state.lastSync) }) : '';
+      status = `<span class="chip chip-status${cls}" role="status">${esc(text)}</span>
+        <button class="chip chip-icon" data-action="refresh" aria-label="${esc(t('refresh'))}" title="${esc(t('refresh'))}">⟳</button>`;
+    } else {
+      status = `<span class="chip chip-status">${esc(t('sample'))}</span>`;
+    }
+    $('#topbar').innerHTML = `
+      <div class="logo"><i aria-hidden="true">✦</i>${esc(t('appName'))}</div>
+      ${avg}
+      ${status}
+      <button class="chip" data-action="sources">📄 ${esc(t('sources'))}</button>
+      <button class="chip" data-action="lang" lang="${state.lang === 'he' ? 'en' : 'he'}">${esc(t('language'))}</button>`;
+  }
+
+  // ---------- render: 7-day banner ----------
+  function renderBanner() {
+    const exams = allExams();
+    const list = L.weekNotice(exams, now());
+    if (!list.length) {
+      $('#banner').innerHTML = '';
+      return;
+    }
+    const c = ctx();
+    const cluster = L.findCluster(exams, c, now());
+    const title = list.length === 1 ? t('bannerOne') : t('bannerMany', { n: list.length });
+    const items = list
+      .map((e) => {
+        const r = L.readiness(e, c, now());
+        return `<li><span class="dot" style="background:${color(e.subject)}"></span>
+          <span>${label(e.subject, e.title)}</span>
+          <span class="when">${esc(when(e))} · ${esc(t('freeHours', { t: dur(r.available) }))}</span></li>`;
+      })
+      .join('');
+    const clusterHtml = cluster
+      ? `<div class="cluster"><span aria-hidden="true">⚠</span><span>${esc(t('cluster', { n: cluster.count, date: fmtDate(cluster.start) }))}</span></div>`
+      : '';
+    $('#banner').innerHTML = `
+      <div class="banner${state.bannerCollapsed ? ' collapsed' : ''}" role="region" aria-label="${esc(title)}">
+        <div class="banner-head"><span class="ico" aria-hidden="true">🔔</span><h2>${esc(title)}</h2>
+          <button class="link" data-action="banner">${esc(state.bannerCollapsed ? t('expand') : t('collapse'))}</button></div>
+        <ul>${items}</ul>${clusterHtml}
+      </div>`;
+  }
+
+  // ---------- render: hero ----------
+  function renderHero() {
+    const el = $('#hero');
+    const list = L.upcoming(allExams(), now());
+    if (!list.length) {
+      el.innerHTML = `<div class="card"><div class="empty"><b>${esc(t('noTests'))}</b>${esc(t('noTestsHint'))}</div></div>`;
+      return;
+    }
+    const e = list[0];
+    const cd = L.countdown(e, now());
+    const r = L.readiness(e, ctx(), now());
+    const slot = lessonSlot(e);
+    const hint = r.status === 'boost' ? t('boostHint', { m: r.extraPerDay || 5 }) : r.status === 'tight' ? t('tightHint') : t('okHint');
+    const icon = { ontrack: '✓', tight: '◐', boost: '↑' }[r.status];
+    const later = list
+      .slice(1, 4)
+      .map(
+        (x) => `<div class="later-chip"><b><span class="dot" style="background:${color(x.subject)}"></span><bdi>${esc(x.subject)}</bdi></b>
+          <span>${esc(typeName(x.type))} · ${esc(when(x))}</span><span>${esc(fmtDate(x.startsAt))}</span></div>`
+      )
+      .join('');
+    const meta = [fmtDate(e.startsAt, true), e.noTime ? '' : fmtTime(e.startsAt), slot].filter(Boolean).join(' · ');
+    el.innerHTML = `
+      <article class="card hero" data-level="${cd.level}">
+        <div class="hero-top"><span>${esc(t('nextTest'))}</span>${e.source === 'local' ? `<span class="tag">${esc(t('local'))}</span>` : ''}
+          <span style="margin-inline-start:auto" class="tag">${esc(typeName(e.type))}${e.moed === 'B' ? ' · ' + esc(t('moedB')) : ''}</span></div>
+        <div class="hero-subject"><span class="dot" style="background:${color(e.subject)};width:14px;height:14px;flex:none"></span><h2>${label(e.subject, e.title)}</h2></div>
+        <p class="hero-meta">${esc(meta)}</p>
+        <div class="cd" role="timer" aria-label="${esc(cd.days + ' ' + t('days') + ' ' + cd.hours + ' ' + t('hours'))}">
+          <div class="cd-box"><div class="cd-num">${cd.days}</div><div class="cd-lbl">${esc(t('days'))}</div></div>
+          <div class="cd-box"><div class="cd-num">${L.pad(cd.hours)}</div><div class="cd-lbl">${esc(t('hours'))}</div></div>
+          <div class="cd-box"><div class="cd-num">${L.pad(cd.minutes)}</div><div class="cd-lbl">${esc(t('min'))}</div></div>
+        </div>
+        <span class="badge ${r.status}"><span aria-hidden="true">${icon}</span>${esc(t(r.status))}</span>
+        <p class="hint">${esc(hint)}</p>
+        <div class="stats">
+          <div class="stat"><b>${esc(dur(r.available))}</b><span>${esc(t('timeAvailable'))}</span></div>
+          <div class="stat"><b>${esc(dur(r.needed))}</b><span>${esc(t('timeNeeded'))}</span></div>
+          <div class="stat"><b>${esc(dur(r.logged))}</b><span>${esc(t('timeLogged'))}</span></div>
+        </div>
+        <div class="row"><button class="btn btn-primary btn-block" data-action="timer" data-subject="${esc(e.subject)}">${esc(t('startStudying'))}</button>
+          ${e.source === 'local' ? `<button class="btn btn-danger" style="flex:0 0 auto" data-action="delLocal" data-id="${esc(e.id)}">${esc(t('delete'))}</button>` : ''}</div>
+        ${later ? `<div class="later"><div class="later-title">${esc(t('later'))}</div><div class="later-row">${later}</div></div>` : ''}
+      </article>`;
+  }
+
+  // ---------- render: today's schedule ----------
+  function renderSchedule() {
+    const n = now();
+    const d = data();
+    const lessons = L.lessonsOn(d.schedule, n, d.holidays);
+    const todaysTests = allExams().filter((e) => L.sameDay(e.startsAt, n));
+    const minNow = n.getHours() * 60 + n.getMinutes();
+    let body;
+    if (!d.schedule.length) {
+      body = `<div class="empty">${esc(t('noSchedule'))}${
+        todaysTests.length ? '<ul class="lessons" style="margin-block-start:10px">' + todaysTests.map((x) => `<li class="lesson"><span class="bar" style="background:${color(x.subject)}"></span><span class="name">${label(x.subject, x.title)}</span><span class="pill test">${esc(t('testToday'))}</span></li>`).join('') + '</ul>' : ''
+      }</div>`;
+    } else if (!lessons.length) {
+      body = `<div class="empty"><b>${esc(t('noLessons'))}</b>${esc(t('noLessonsFree', { t: dur(L.freeMinutesOn(n, ctx(), n)) }))}</div>`;
+    } else {
+      const nextIdx = lessons.findIndex((l) => L.timeToMin(l.start) > minNow);
+      body =
+        '<ul class="lessons">' +
+        lessons
+          .map((l, i) => {
+            const s = L.timeToMin(l.start), en = L.timeToMin(l.end);
+            const cur = minNow >= s && minNow < en;
+            const past = minNow >= en;
+            const test = todaysTests.some((x) => x.subject === l.subject);
+            return `<li class="lesson${cur ? ' current' : ''}${past ? ' past' : ''}">
+              <span class="bar" style="background:${color(l.subject)}"></span>
+              <span class="time">${esc(l.start)}–${esc(l.end)}</span>
+              <span class="name"><bdi>${esc(l.subject)}</bdi>${l.period ? ` <span class="room">· ${esc(t('period', { n: l.period }))}</span>` : ''}${l.room ? ` <span class="room">· <bdi>${esc(l.room)}</bdi></span>` : ''}</span>
+              ${cur ? `<span class="pill now">${esc(t('now'))}</span>` : i === nextIdx ? `<span class="pill next">${esc(t('next'))}</span>` : ''}
+              ${test ? `<span class="pill test">${esc(t('testToday'))}</span>` : ''}
+            </li>`;
+          })
+          .join('') +
+        '</ul>';
+    }
+    $('#schedule').innerHTML = `<div class="card"><div class="card-title"><span>${esc(t('schedule'))}</span><span>${esc(fmtDate(n))}</span></div>${body}</div>`;
+  }
+
+  // ---------- render: Today's Mission ----------
+  function todayMission() {
+    const n = now();
+    const key = L.ymd(n);
+    const g = L.gradeSummary(data().grades, data().subjects, state.settings);
+    const tasks = L.buildTasks(allExams(), ctx(), n, g.rows, state.confidence);
+    const map = Object.fromEntries(tasks.map((x) => [x.id, x]));
+    let ids = (state.missionIds[key] || []).filter((id) => map[id]);
+    if (ids.length < 3) {
+      const extra = L.pickMission(tasks.filter((x) => !ids.includes(x.id)), state.settings.dailyCapMin).slice(0, 3 - ids.length);
+      ids = ids.concat(extra.map((x) => x.id));
+    }
+    if (JSON.stringify(ids) !== JSON.stringify(state.missionIds[key] || [])) {
+      state.missionIds = { [key]: ids }; // keep only today
+      store.set('mission', state.missionIds);
+    }
+    return ids.map((id) => map[id]);
+  }
+
+  function renderMission() {
+    const n = now();
+    const key = L.ymd(n);
+    const missions = todayMission();
+    const done = state.done[key] || [];
+    const s = L.streak(state.sessions, n);
+    const wk = L.weekMinutes(state.sessions, n);
+    const pct = Math.min(100, Math.round((wk / state.settings.weeklyGoalMin) * 100));
+    let body;
+    if (!missions.length) body = `<div class="empty">${esc(t('missionEmpty'))}</div>`;
+    else {
+      const allDone = missions.every((m) => done.includes(m.id));
+      body =
+        '<ul class="tasks">' +
+        missions
+          .map((m) => {
+            const isDone = done.includes(m.id);
+            return `<li class="task${isDone ? ' done' : ''}"><input type="checkbox" id="task-${esc(m.id)}" data-action="task" data-id="${esc(m.id)}" ${isDone ? 'checked' : ''}>
+              <label for="task-${esc(m.id)}"><span class="t-name">${label(m.subject, m.topic)}</span>
+              <span class="t-sub"><bdi>${esc(m.examTitle)}</bdi> · ${esc(SP.i18n.daysPhrase(m.daysLeft, state.lang, t))}</span></label>
+              <span class="t-min">${esc(dur(m.minutes))}</span></li>`;
+          })
+          .join('') +
+        '</ul>' +
+        (allDone ? `<p class="hint" style="color:var(--ok)">🎉 ${esc(t('missionDone'))}</p>` : '');
+    }
+    $('#mission').innerHTML = `
+      <div class="card"><div class="card-title"><span>${esc(t('mission'))}</span>
+        <span class="tag">🔥 ${esc(s ? countText(s, 'streak') : t('streakNone'))}</span></div>
+        ${body}
+        <div style="margin-block-start:14px" class="note">${esc(t('goal'))}: ${esc(dur(wk))} / ${esc(dur(state.settings.weeklyGoalMin))}
+          <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div></div>
+      </div>`;
+  }
+
+  function renderStatic() {
+    $('#skip').textContent = t('skip');
+    $('#fab').setAttribute('aria-label', t('addTest'));
+    $('#fab').title = t('addTest');
+  }
+
+  function render() {
+    document.documentElement.lang = state.lang;
+    document.documentElement.dir = state.lang === 'he' ? 'rtl' : 'ltr';
+    renderStatic();
+    renderTop();
+    renderBanner();
+    renderHero();
+    renderSchedule();
+    renderMission();
+  }
+
+  // ---------- toast ----------
+  let toastTimer;
+  function toast(msg) {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  }
+
+  // ---------- sessions & tasks ----------
+  const saveSessions = () => store.set('sessions', state.sessions);
+  function addSession(subject, minutes, taskId) {
+    state.sessions.push({ id: 's' + Date.now() + Math.random().toString(36).slice(2, 6), date: L.ymd(now()), subject, minutes, taskId: taskId || null });
+    saveSessions();
+  }
+
+  function toggleTask(id, checked) {
+    const key = L.ymd(now());
+    const done = new Set(state.done[key] || []);
+    const task = todayMission().find((m) => m.id === id);
+    if (checked) {
+      done.add(id);
+      if (task) addSession(task.subject, task.minutes, id);
+    } else {
+      done.delete(id);
+      state.sessions = state.sessions.filter((s) => !(s.taskId === id && s.date === key));
+      saveSessions();
+    }
+    state.done = { [key]: [...done] };
+    store.set('done', state.done);
+    render();
+  }
+
+  // ---------- dialogs ----------
+  function openAdd() {
+    const d = data();
+    const tomorrow = L.ymd(L.addDays(L.startOfDay(now()), 1));
+    $('#dlgAdd').innerHTML = `<form method="dialog" class="dlg-body" id="formAdd">
+      <h2>${esc(t('addTest'))}</h2>
+      <p class="note">${esc(t('addLocal'))}</p>
+      <div class="field"><label for="fSubject">${esc(t('fSubject'))}</label>
+        <select id="fSubject" required>${d.subjects.map((s) => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="fTitle">${esc(t('fTitle'))}</label><input id="fTitle" maxlength="60"></div>
+      <div class="field"><label for="fType">${esc(t('fType'))}</label>
+        <select id="fType">${Object.entries(t('types')).map(([k, v]) => `<option value="${k}"${k === 'test' ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select></div>
+      <div class="row"><div class="field"><label for="fDate">${esc(t('fDate'))}</label><input id="fDate" type="date" value="${tomorrow}" required></div>
+        <div class="field"><label for="fTime">${esc(t('fTime'))}</label><input id="fTime" type="time" value="09:00" required></div></div>
+      <div class="actions"><button type="button" class="btn" data-action="closeDlg">${esc(t('cancel'))}</button>
+        <button type="submit" class="btn btn-primary">${esc(t('save'))}</button></div></form>`;
+    $('#dlgAdd').showModal();
+    $('#formAdd').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const subject = $('#fSubject').value;
+      const type = $('#fType').value;
+      const e = {
+        id: 'local:' + Date.now(), subject, type, title: $('#fTitle').value.trim() || subject,
+        date: $('#fDate').value, time: $('#fTime').value || '09:00', weight: 3, difficulty: 3, topics: [], notes: '',
+      };
+      if (!e.date) return;
+      state.localExams.push(e);
+      store.set('localExams', state.localExams);
+      $('#dlgAdd').close();
+      render();
+    });
+  }
+
+  // focus timer (25 min); SPEC S8
+  let timer = null;
+  function openTimer(subject) {
+    if (timer) clearInterval(timer.id);
+    timer = { subject, total: 25 * 60, left: 25 * 60, running: false, id: null };
+    $('#dlgTimer').innerHTML = `<div class="dlg-body">
+      <h2>${esc(t('focus'))}</h2><p class="muted">${esc(t('focusFor', { s: subject }))}</p>
+      <div class="timer-face" id="timerFace" role="timer">25:00</div>
+      <div class="actions"><button class="btn" data-action="closeTimer">${esc(t('cancel'))}</button>
+        <button class="btn" id="btnPause" data-action="timerToggle">${esc(t('startTimer'))}</button>
+        <button class="btn btn-primary" data-action="timerFinish">${esc(t('finish'))}</button></div></div>`;
+    $('#dlgTimer').showModal();
+  }
+  function timerFace() {
+    const m = Math.floor(timer.left / 60), s = timer.left % 60;
+    $('#timerFace').textContent = L.pad(m) + ':' + L.pad(s);
+  }
+  function timerToggle() {
+    if (!timer) return;
+    if (timer.running) {
+      clearInterval(timer.id);
+      timer.running = false;
+      $('#btnPause').textContent = t('resume');
+    } else {
+      timer.running = true;
+      $('#btnPause').textContent = t('pause');
+      timer.id = setInterval(() => {
+        timer.left = Math.max(0, timer.left - 1);
+        timerFace();
+        if (timer.left === 0) timerFinish();
+      }, 1000);
+    }
+  }
+  function timerFinish() {
+    if (!timer) return;
+    clearInterval(timer.id);
+    const minutes = Math.round((timer.total - timer.left) / 60);
+    const subject = timer.subject;
+    timer = null;
+    $('#dlgTimer').close();
+    if (minutes >= 1) {
+      addSession(subject, minutes, null);
+      toast(t('logged', { m: minutes }));
+      render();
+    }
+  }
+  function closeTimer() {
+    if (timer) clearInterval(timer.id);
+    timer = null;
+    $('#dlgTimer').close();
+  }
+
+  function openGrades() {
+    const g = L.gradeSummary(data().grades, data().subjects, state.settings);
+    const trendText = { rising: t('trendRising'), stable: t('trendStable'), falling: t('trendFalling') };
+    const rows = g.rows
+      .map((r) => `<li class="g-row"><span class="bar" style="background:${r.subject.color}"></span>
+        <div><div class="g-name"><bdi>${esc(r.subject.name)}</bdi></div>
+          <div class="g-sub"><span>${esc(countText(r.count, 'gradeCount'))}</span>
+            ${r.trend ? `<span class="trend ${r.trend}">${r.trend === 'rising' ? '↗' : r.trend === 'falling' ? '↘' : '→'} ${esc(trendText[r.trend])}</span>` : ''}
+            ${r.weak ? `<span class="tag">${esc(t('attention'))}</span>` : ''}</div></div>
+        <div class="g-avg">${r.avg.toFixed(1)}</div></li>`)
+      .join('');
+    $('#dlgGrades').innerHTML = `<div class="dlg-body"><h2>${esc(t('grades'))}</h2>
+      ${g.overall !== null ? `<div class="g-overall"><b>${g.overall.toFixed(1)}</b><span class="muted">${esc(t('overall'))}</span></div>` : ''}
+      ${rows ? `<ul class="g-list">${rows}</ul>` : `<div class="empty">${esc(t('noGrades'))}</div>`}
+      <p class="note">${esc(t('howCalc'))}</p>
+      <div class="actions"><button class="btn" data-action="closeDlg">${esc(t('close'))}</button></div></div>`;
+    $('#dlgGrades').showModal();
+  }
+
+  // ---------- data sources dialog ----------
+  // drafts keep what the student typed while the dialog is re-rendered
+  const drafts = { url: { calendar: '', grades: '', sheet: '' }, gid: {}, tabs: {}, msg: {} };
+
+  function sourceSummary(kind) {
+    const s = state.src[kind];
+    const p = state.parsed[kind];
+    if (!s || !p) return '';
+    let text;
+    if (kind === 'calendar') {
+      const n = p.data.exams.length;
+      text = t(n === 1 ? 'testsLoadedOne' : 'testsLoaded', { n, tab: s.tabName || '' });
+    } else if (kind === 'grades') {
+      const n = p.data.grades.length;
+      text = t(n === 1 ? 'gradesLoadedOne' : 'gradesLoaded', { n });
+    }
+    else text = t('sheetLoaded', { e: p.data.exams.length, g: p.data.grades.length });
+    const issues = p.issues.length
+      ? `<div><b>${esc(t('issuesTitle', { n: p.issues.length }))}</b><ul class="issues">${p.issues
+          .slice(0, 40)
+          .map((i) => `<li>${esc(i.tab)}, ${esc(t('row'))} ${i.row}: ${esc(t('issue_' + i.key))}</li>`)
+          .join('')}</ul></div>`
+      : '';
+    return `<div class="ok-box">✓ ${esc(text)}</div>${issues}`;
+  }
+
+  function sourceSection(kind) {
+    const s = state.src[kind];
+    const title = { calendar: 'srcCalendarTitle', grades: 'srcGradesTitle', sheet: 'srcSheetTitle' }[kind];
+    const help = { calendar: 'srcCalendarHelp', grades: 'srcGradesHelp', sheet: 'srcSheetHelp' }[kind];
+    const tabs = drafts.tabs[kind] || [];
+    const chosen = drafts.gid[kind] || (s && s.gid) || '';
+    const tabPicker = tabs.length
+      ? `<div class="field"><label for="tab-${kind}">${esc(t('tab'))}</label><select id="tab-${kind}" data-tab="${kind}">${tabs
+          .map((x) => `<option value="${esc(x.gid)}"${String(x.gid) === String(chosen) ? ' selected' : ''}>${esc(x.name)}</option>`)
+          .join('')}</select></div>`
+      : '';
+    const value = drafts.url[kind] !== '' ? drafts.url[kind] : s ? s.input : '';
+    return `<section class="src" data-kind="${kind}">
+      <h3>${esc(t(title))}</h3>
+      <p class="note">${esc(t(help))}</p>
+      ${kind !== 'calendar' ? `<div class="warn-box">${esc(t('publicWarn'))}</div>` : ''}
+      <div class="field"><input data-url="${kind}" dir="ltr" placeholder="${esc(t('linkPlaceholder'))}" value="${esc(value)}" aria-label="${esc(t(title))}"></div>
+      ${tabPicker}
+      <div id="msg-${kind}">${drafts.msg[kind] ? drafts.msg[kind] : ''}</div>
+      ${sourceSummary(kind)}
+      <div class="actions">
+        ${s ? `<button type="button" class="btn btn-danger" data-action="srcDisconnect" data-kind="${kind}">${esc(t('disconnect'))}</button>` : ''}
+        <button type="button" class="btn btn-primary" data-action="srcConnect" data-kind="${kind}">${esc(s ? t('reconnect') : t('connect'))}</button>
+      </div></section>`;
+  }
+
+  function openSources() {
+    const dlg = $('#dlgSheet');
+    dlg.innerHTML = `<div class="dlg-body"><h2>${esc(t('sources'))}</h2>
+      ${KINDS.map(sourceSection).join('')}
+      <div class="actions"><button class="btn" data-action="closeDlg">${esc(t('close'))}</button></div></div>`;
+    if (!dlg.open) dlg.showModal();
+  }
+  const setMsg = (kind, html) => {
+    drafts.msg[kind] = html;
+    openSources();
+  };
+  const errBox = (text) => `<div class="err-box">${esc(text)}</div>`;
+
+  async function loadTabsFor(kind) {
+    const link = SH.parseLink(drafts.url[kind]);
+    drafts.tabs[kind] = [];
+    if (link && link.kind === 'published' && kind !== 'sheet') {
+      try {
+        drafts.tabs[kind] = await SH.listPublishedTabs(link.id);
+        drafts.gid[kind] = link.gid || (drafts.tabs[kind][0] && drafts.tabs[kind][0].gid) || '';
+      } catch (e) { /* the connect step reports problems */ }
+    }
+    drafts.msg[kind] = '';
+    openSources();
+  }
+
+  async function connectSource(kind) {
+    const input = (drafts.url[kind] || (state.src[kind] && state.src[kind].input) || '').trim();
+    const link = SH.parseLink(input);
+    if (!link) return setMsg(kind, errBox(t('badLink')));
+    setMsg(kind, `<div class="note">${esc(t('connecting'))}</div>`);
+    try {
+      let cache, cfg;
+      if (kind === 'sheet') {
+        const { tabs, missing } = await SH.loadSheet(link);
+        if (missing.length) return setMsg(kind, errBox(t('missingTabs', { t: missing.join(', ') })));
+        cache = tabs;
+        cfg = { input, link };
+      } else {
+        const chosen = drafts.gid[kind] || link.gid || null;
+        const r = await SH.loadSingleTab(link, chosen);
+        if (!r.rows) throw new Error('no rows');
+        const probe = parseSource(kind, r.rows);
+        const count = kind === 'calendar' ? probe.data.exams.length : probe.data.grades.length;
+        if (probe.missingColumns || count === 0) return setMsg(kind, errBox(t(kind === 'calendar' ? 'nothingFound' : 'noGradesFound')));
+        cache = r.rows;
+        cfg = { input, link, gid: r.gid, tabName: r.tabName };
+      }
+      state.src[kind] = cfg;
+      store.set(CFG[kind], cfg);
+      store.set(CACHE[kind], cache);
+      store.del('sheetId');
+      state.parsed[kind] = parseSource(kind, cache);
+      state.errors[kind] = false;
+      state.lastSync = Date.now();
+      store.set('lastSync', state.lastSync);
+      drafts.msg[kind] = '';
+      bump();
+      render();
+      openSources();
+    } catch (e) {
+      setMsg(kind, errBox(t('noAccess')));
+    }
+  }
+
+  function disconnectSource(kind) {
+    state.src[kind] = null;
+    state.parsed[kind] = null;
+    state.errors[kind] = false;
+    [CFG[kind], CACHE[kind]].forEach((k) => store.del(k));
+    if (kind === 'sheet') store.del('sheetId');
+    drafts.url[kind] = '';
+    drafts.tabs[kind] = [];
+    drafts.gid[kind] = '';
+    drafts.msg[kind] = '';
+    if (!hasSources()) {
+      state.lastSync = null;
+      store.del('lastSync');
+    }
+    bump();
+    render();
+    openSources();
+  }
+
+  // ---------- sync (SPEC §9.7): each source is refreshed on its own; cached data stays if one fails ----------
+  async function syncKind(kind) {
+    const s = state.src[kind];
+    if (!s) return;
+    try {
+      let cache;
+      if (kind === 'sheet') {
+        const { tabs, missing } = await SH.loadSheet(s.link);
+        if (missing.length) throw new Error('missing');
+        cache = tabs;
+      } else {
+        const r = await SH.loadSingleTab(s.link, s.gid);
+        if (!r.rows) throw new Error('no rows');
+        cache = r.rows;
+      }
+      store.set(CACHE[kind], cache);
+      state.parsed[kind] = parseSource(kind, cache);
+      state.errors[kind] = false;
+      state.lastSync = Date.now();
+      store.set('lastSync', state.lastSync);
+    } catch (e) {
+      state.errors[kind] = true; // keep cached data visible (SPEC §11)
+    }
+  }
+
+  async function sync() {
+    if (!hasSources()) return;
+    await Promise.all(KINDS.map(syncKind));
+    bump();
+    render();
+  }
+
+  // ---------- events ----------
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-action]');
+    if (!el) return;
+    const a = el.dataset.action;
+    if (a === 'lang') {
+      state.lang = state.lang === 'he' ? 'en' : 'he';
+      store.set('lang', state.lang);
+      t = SP.i18n.makeT(state.lang);
+      bump();
+      render();
+    } else if (a === 'grades') openGrades();
+    else if (a === 'sources') openSources();
+    else if (a === 'refresh') sync().then(() => toast(anyError() ? t('syncError') : t('updated', { t: t('justNow') })));
+    else if (a === 'banner') {
+      state.bannerCollapsed = !state.bannerCollapsed;
+      renderBanner();
+    } else if (a === 'timer') openTimer(el.dataset.subject);
+    else if (a === 'timerToggle') timerToggle();
+    else if (a === 'timerFinish') timerFinish();
+    else if (a === 'closeTimer') closeTimer();
+    else if (a === 'closeDlg') el.closest('dialog').close();
+    else if (a === 'srcConnect') connectSource(el.dataset.kind);
+    else if (a === 'srcDisconnect') disconnectSource(el.dataset.kind);
+    else if (a === 'delLocal') {
+      state.localExams = state.localExams.filter((x) => x.id !== el.dataset.id);
+      store.set('localExams', state.localExams);
+      render();
+    }
+  });
+  document.addEventListener('change', (ev) => {
+    const task = ev.target.closest('[data-action="task"]');
+    if (task) return toggleTask(task.dataset.id, task.checked);
+    const url = ev.target.closest('[data-url]');
+    if (url) {
+      drafts.url[url.dataset.url] = url.value.trim();
+      return loadTabsFor(url.dataset.url);
+    }
+    const tab = ev.target.closest('[data-tab]');
+    if (tab) drafts.gid[tab.dataset.tab] = tab.value;
+  });
+  document.addEventListener('input', (ev) => {
+    const url = ev.target.closest('[data-url]');
+    if (url) drafts.url[url.dataset.url] = url.value.trim();
+  });
+  document.addEventListener('keydown', (ev) => {
+    const url = ev.target.closest && ev.target.closest('[data-url]');
+    if (url && ev.key === 'Enter') {
+      ev.preventDefault();
+      drafts.url[url.dataset.url] = url.value.trim();
+      connectSource(url.dataset.url);
+    }
+  });
+  $('#fab').addEventListener('click', openAdd);
+  $('#dlgTimer').addEventListener('close', () => {
+    if (timer) {
+      clearInterval(timer.id);
+      timer = null;
+    }
+  });
+
+  // ---------- start ----------
+  loadCaches();
+  render();
+  sync();
+  setInterval(sync, 15 * 60 * 1000); // SPEC F0: every 15 minutes
+  setInterval(render, 30 * 1000); // keep countdowns and "now" fresh
+
+  SP.app = { state, render, data, allExams, todayMission, connectSource, drafts };
+})();

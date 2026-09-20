@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0E1117">
+  <title>StudyPlanner</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%237c6cff'/%3E%3Cpath d='M16 6l2.6 7.4L26 16l-7.4 2.6L16 26l-2.6-7.4L6 16l7.4-2.6z' fill='%230e1117'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip" id="skip" href="#main"></a>
+
+  <header class="topbar" id="topbar"></header>
+
+  <main id="main" class="page" tabindex="-1">
+    <div id="banner"></div>
+    <div class="grid">
+      <section id="hero" class="col-main" aria-live="polite"></section>
+      <div class="col-side">
+        <section id="schedule"></section>
+        <section id="mission"></section>
+      </div>
+    </div>
+  </main>
+
+  <button class="fab" id="fab" type="button">+</button>
+
+  <!-- Add local test -->
+  <dialog id="dlgAdd" class="dlg"></dialog>
+  <!-- Focus timer -->
+  <dialog id="dlgTimer" class="dlg"></dialog>
+  <!-- Grades -->
+  <dialog id="dlgGrades" class="dlg dlg-wide"></dialog>
+  <!-- Connect sheet -->
+  <dialog id="dlgSheet" class="dlg dlg-wide"></dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/logic.js"></script>
+  <script src="js/sheets.js"></script>
+  <script src="js/sample.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
