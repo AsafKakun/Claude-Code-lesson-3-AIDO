@@ -2,7 +2,7 @@
 
 A dark-mode web dashboard that helps students manage tests, exams and bagruts, and plan their study time by showing test dates, countdowns and how much study time is left. It is built around the school timetable, fed from Google Sheets, and turns grades into clear averages and insights.
 
-- **Status:** Draft v0.3 (adds expanded student features, analytics, screen-by-screen UX, Israeli school specifics, a fact-checked technical section and a decision log)
+- **Status:** Draft v0.4 (open questions closed: decision log D1–D19 resolved or consciously deferred; minimal phone-first dashboard; bagrut 70/30 default; `spreadsheets.readonly` scope)
 - **Languages:** Hebrew (RTL) and English (LTR), switchable at runtime
 - **Theme:** Dark mode (primary and only theme in v1)
 
@@ -76,7 +76,7 @@ Priority key used in this document: **P0** = must be in v1, **P1** = should be i
 ### 3.1 MVP (v1)
 
 #### F0. Google Sheets data source (P0)
-- The student (or parent/teacher) connects **one Google Spreadsheet** by choosing it with the Google file picker (see §10.1 for the scope choice and fallbacks).
+- The student (or parent/teacher) connects **one Google Spreadsheet** by signing in with Google (read-only `spreadsheets.readonly` scope, Decision D19) and pasting the sheet's link or ID (see §10.1).
 - The app reads these tabs (exact columns in §8.1): **Schedule**, **Exams**, **Grades**, and optionally **Subjects**, **Topics**, **Holidays**.
 - **Sync:** on app open, then every 15 minutes while open, plus a manual "Refresh" button. Last-sync time is shown in the header.
 - **Validation:** rows with a bad date, unknown subject or non-numeric grade are skipped and listed in a "Sync issues" panel with the row number, so the student knows what to fix in the sheet.
@@ -421,7 +421,7 @@ Card, stat tile, countdown, progress bar, progress ring, chip, checklist item, m
 - **Charts:** the time axis runs in the reading direction (right-to-left in Hebrew); numbers and tick labels stay left-to-right.
 - Sidebar moves to the right in RTL; progress bars fill from the reading-start side.
 - **Dates & numbers:** `Intl.DateTimeFormat` / `date-fns` locale (`he`, `en`); week starts Sunday by default.
-- Optional display of the Hebrew calendar date (setting, off by default).
+- **Hebrew calendar date** shown next to the civil date: **on by default in Hebrew mode, off in English mode**, toggle in Settings (Decision D4).
 - All strings in translation files (`locales/he.json`, `locales/en.json`); no hard-coded text; pluralization via i18next (Hebrew has distinct plural forms, including a dual for some nouns, e.g., "יומיים").
 - Mixed-direction text (English subject names inside Hebrew UI) wrapped with `<bdi>` to avoid punctuation flipping.
 - **Gender-neutral Hebrew copy:** prefer nouns, infinitives and "יש לך" over gendered verb forms; avoid addressing the student as male or female.
@@ -435,7 +435,7 @@ Card, stat tile, countdown, progress bar, progress ring, chip, checklist item, m
 | **Grade levels** | Middle school ז–ט (7–9), high school י–יב (10–12). The level selects sensible defaults (e.g., bagrut tracker visible from י). |
 | **Grade scale** | 0–100 by default. |
 | **Pass mark** | Default **55** (widely cited for bagrut exams), configurable per subject because schools vary. |
-| **Bagrut final grade** | Each bagrut subject's final grade combines the school grade and the exam grade. **The split is a per-subject setting (`schoolWeight`), not hard-coded.** Sources found while researching disagreed (50/50 vs. 30/70 school/exam), and the Ministry booklet consulted did not state it; the split must be confirmed against the current Ministry of Education circular for each subject before release (see Decision D9 and §14). |
+| **Bagrut final grade** | Each bagrut subject's final grade combines the school grade and the exam grade. **Default: 70% bagrut exam + 30% school grade** (`schoolWeight = 0.3`), as set by the product owner (Decision D9). It stays a per-subject setting because secondary sources report other splits (e.g., 50/50) and schools may differ; the Ministry booklet consulted did not state it (§14). |
 | **Study units** | Bagrut subjects are studied at 3, 4 or 5 units (2 in some subjects). The bagrut average is weighted by units (§9.8). University-admission bonuses for 4/5-unit subjects are **out of scope**. |
 | **Bagrut sittings** | Moed A / Moed B dates are published by the Ministry; the student (or teacher) enters them in the Exams tab. Exams with `type = bagrut` carry a `moed` value; both sittings of a subject share a `moedGroup` so the app can show that Moed B is a retake. |
 | **Core bagrut subjects** | Commonly cited compulsory areas include Hebrew, English, Mathematics, Tanakh (Bible), Literature, History and Civics. The list **must be verified** with the Ministry before being used for any "missing requirement" feature; v1 does not warn about missing requirements. |
@@ -461,7 +461,7 @@ Settings (local)
   showHebrewDate, gradeScaleMax (default 100), passMark (default 55), weightByUnits
 
 SheetConnection             // the linked Google Spreadsheet
-  userId, spreadsheetId, authMode ("picker_drive_file"|"spreadsheets_readonly"|"public_csv"),
+  userId, spreadsheetId, authMode ("spreadsheets_readonly"|"public_csv"),
   lastSyncAt, status ("ok"|"error"|"no_access"), lastError?
 
 SyncIssue                   // row-level problems found during sync
@@ -534,7 +534,7 @@ One spreadsheet per student (Decision D8). Row 1 of every tab is a header; heade
 | **Schedule** | `weekday`, `period`, `start`, `end`, `subject`, `room`, `teacher`, `type`, `date`, `validFrom`, `validTo` | `weekday` 1–7 (Sun–Sat) or name; `type` = `lesson` (default) or `off`; `date` (optional) makes the row a one-off override for that day; `validFrom`/`validTo` (optional) limit a row to a semester |
 | **Exams** | `date`, `time`, `subject`, `title`, `type`, `moed`, `weight`, `difficulty`, `topics`, `notes` | `type` = quiz/test/exam/project/bagrut; `moed` = A/B (bagrut); `topics` comma-separated; `weight` and `difficulty` optional (default 3) |
 | **Grades** | `date`, `subject`, `title`, `grade`, `weight`, `type` | `grade` numeric; `weight` optional (default 1); `type` optional |
-| **Subjects** *(optional)* | `name`, `color`, `units`, `isBagrut`, `targetAverage`, `schoolWeight`, `remainingWeight`, `passMark` | If missing, subjects are created from names found in other tabs. `schoolWeight` is 0–1 (or a percentage) |
+| **Subjects** *(optional)* | `name`, `color`, `units`, `isBagrut`, `targetAverage`, `schoolWeight`, `remainingWeight`, `passMark` | If missing, subjects are created from names found in other tabs. `schoolWeight` is 0–1 (or a percentage); default 0.3 for bagrut subjects |
 | **Topics** *(optional)* | `subject`, `exam`, `topic`, `estimatedMinutes` | Gives the plan generator real topics; `exam` is the exam title (optional) |
 | **Holidays** *(optional)* | `date`, `name`, `type` | `type` = `off` or `short` |
 
@@ -631,7 +631,7 @@ finalGrade      = s · schoolGrade + (1 − s) · examGrade         (s = Subject
 neededExamGrade = (target − s · schoolGrade) / (1 − s)           (s < 1)
 bagrutAverage   = Σ (finalGradeₛ · unitsₛ) / Σ unitsₛ
 ```
-- `s` has **no built-in default**: until the student (or the sheet) sets `schoolWeight`, the app shows the calculator with an input and a "verify with your school" note (§7.1).
+- `s` defaults to **0.3** (bagrut exam 70%, school grade 30%, Decision D9). The student or the sheet (`schoolWeight` column) can change it per subject; the calculator always shows the weights in use.
 - **Worked example (needed exam grade):** school grade 84, `s = 0.3`, target final 85 → (85 − 0.3·84) / 0.7 = 59.8 / 0.7 = **85.4**. With `s = 0.5` the same target needs (85 − 42) / 0.5 = **86.0**.
 - **Worked example (bagrut average):** Math 5 units final 90, English 4 units final 80, Bible 2 units final 70 → (90·5 + 80·4 + 70·2) / 11 = 910 / 11 = **82.7**.
 - Edge cases: `neededExamGrade > 100` → "Not reachable"; a subject without an exam grade yet is excluded from the average and listed as "pending".
@@ -714,7 +714,7 @@ score          = 0.5·urgency + 0.3·weakness + 0.2·confidenceGap
 | Dates | **date-fns** (+ `he`, `en` locales), IANA time zones | Lightweight, locale-aware |
 | Charts | **Recharts** | Simple, themeable |
 | State | **Zustand** or React Query for server state | Small and simple |
-| Data source | **Google Sheets API v4** with **Google Picker** and scope `drive.file`; fallback scope `spreadsheets.readonly`; sign-in with **Google Identity Services** | Narrowest permissions; see §10.1 |
+| Data source | **Google Sheets API v4** with scope `spreadsheets.readonly`; sign-in with **Google Identity Services** | Read-only access; simplest flow (paste the sheet link); see §10.1 |
 | Data source (prototype fallback) | Sheet "Publish to web" as CSV, fetched and parsed with **PapaParse** | Fastest way to demo; **not for real grades** (public link) |
 | Persistence (v1) | **Local-first cache and progress store:** IndexedDB (Dexie) | Offline display; the sheet stays the source of truth for sheet data |
 | Email notices (v1) | **Google Apps Script** bound to the template sheet, daily time trigger | Sends the 7-day notice by email with no backend; see §10.2 |
@@ -726,8 +726,8 @@ score          = 0.5·urgency + 0.3·weakness + 0.2·confidenceGap
 ### 10.1 Google access and scopes (fact-checked)
 | Option | Classification (per Google docs) | Use |
 |---|---|---|
-| `drive.file` (+ Google Picker) | **Non-sensitive**; Google's documented "narrowest" Drive access | **Recommended.** The student picks the spreadsheet in the Picker and the app can then read that file only. No OAuth app verification needed for a non-sensitive scope. **An early spike (M0) must confirm** that Sheets `values.batchGet` works on a Picker-selected file with this scope. |
-| `spreadsheets.readonly` | **Sensitive** | Fallback if the spike fails. Requires **Google OAuth app verification** (consent screen, privacy policy, possibly a demo video) before students outside the test-user list can sign in. Plan lead time. |
+| `spreadsheets.readonly` | **Sensitive** | **Chosen (Decision D19).** Read-only access to the student's spreadsheets; the student pastes the sheet link/ID. Requires **Google OAuth app verification** (consent screen, privacy policy, possibly a demo video) before students outside the test-user list can sign in — **start verification in M0**. |
+| `drive.file` (+ Google Picker) | **Non-sensitive**; Google's documented "narrowest" Drive access | Not used in v1. Kept as a possible later switch if verification proves too slow (untested with the Sheets API). |
 | `drive.readonly` / `drive` | **Restricted** | **Do not use** — broad access and heavier verification. |
 | Public CSV | No sign-in | Prototype only; anyone with the link sees the grades. |
 
@@ -756,7 +756,7 @@ Quotas (Google Sheets API): **300 read requests per minute per project** and **6
 - **Browser support:** latest two versions of Chrome, Safari, Firefox, Edge; Web Push on iOS requires iOS 16.4+ and an installed PWA.
 - **Privacy & minors:**
   - Collect the minimum data (no real name required, no location).
-  - **Grades are sensitive data about minors:** request the narrowest scope that works (§10.1), read only the tabs listed in §8.1, never share data with third parties, no analytics on grade values.
+  - **Grades are sensitive data about minors:** request only the read-only Sheets scope (§10.1), read only the tabs listed in §8.1, never share data with third parties, no analytics on grade values.
   - Do not require a public sheet link for real data; if the CSV prototype is used, warn the user that anyone with the link can see the grades.
   - In v1 there is no server-side storage of grades: data stays in the student's Google account and in the browser cache; OAuth tokens kept in memory/secure storage, revocable from Settings ("Disconnect Google Sheet" also wipes the cache).
   - Clear privacy statement in both languages, including exactly what is read from the sheet.
@@ -765,7 +765,7 @@ Quotas (Google Sheets API): **300 read requests per minute per project** and **6
 - **Reliability of reminders:** local scheduling must survive reload. The 7-day notice is the highest-priority reminder: it must never be silently dropped — the in-app banner and notification-center entry are always created (§9.5, §10.2).
 - **Sync:** ≤ 15-minute staleness while open; sync of a typical sheet (≤ 500 rows) completes in < 3 s; malformed rows never block the rest of the data.
 - **Sheet permissions:** losing access (revoked, sheet deleted, not shared) shows a clear message with a "Reconnect" action; cached data remains visible.
-- **Google verification lead time:** if the fallback scope (`spreadsheets.readonly`) is required, allow several weeks for OAuth verification before public launch.
+- **Google verification lead time:** the `spreadsheets.readonly` scope is Sensitive, so Google's OAuth app verification is required before public launch; start it in M0 and allow several weeks. Until approved, only listed test users can sign in.
 
 ---
 
@@ -773,7 +773,7 @@ Quotas (Google Sheets API): **300 read requests per minute per project** and **6
 
 | Milestone | Scope |
 |---|---|
-| **M0 — Design & spikes** | Wireframes for all §4.1 screens; finalize dark palette; HE/EN copy; **Google Sheet template (Schedule / Exams / Grades / Subjects / Topics / Holidays) + Apps Script email**; **spike: Picker + `drive.file` reading a sheet via Sheets API**; confirm Ministry grade rules (D9) |
+| **M0 — Design & spikes** | Wireframes for all §4.1 screens; finalize dark palette; HE/EN copy; **Google Sheet template (Schedule / Exams / Grades / Subjects / Topics / Holidays) + Apps Script email**; **start Google OAuth verification for `spreadsheets.readonly`** (consent screen, privacy policy; D19) |
 | **M1 — Data & core (P0)** | **Google Sheets connection + sync + cache + Sync issues panel**, data model, subjects, exams from sheet, countdown, dashboard hero + countdown strip, **Today's schedule**, onboarding |
 | **M2 — Planning & grades (P0)** | Free time derived from schedule/holidays, time-left calculator, readiness status, study plan generator, **Today's Mission**, **grade averages per subject + overall + grades overview widget**, weak-subject flag, trend |
 | **M3 — Reminders (P0)** | **Mandatory 7-day notice for every test** (in-app banner + notification center + Apps Script email), other lead times, quiet hours, grouping/dedup, test-cluster warning |
@@ -785,34 +785,31 @@ Quotas (Google Sheets API): **300 read requests per minute per project** and **6
 
 ## 13. Decision Log and Open Items
 
-Decisions below are **proposed** defaults that resolve the earlier open questions. Change any of them and the affected sections are listed in the last column.
+Status legend: **Decided** = approved by the product owner; **Deferred** = consciously postponed, with the interim behavior stated. Every decision lists the sections it affects.
 
-| ID | Question | Proposed decision | Why | Affects |
-|---|---|---|---|---|
-| D1 | Pre-filled bagrut subject/topic templates? | **Not in v1.** Provide an example Topics tab students can copy; revisit once Ministry syllabi ownership is clear. | Content must be accurate and maintained; wrong syllabi would mislead. | §3.2, §8.1 |
-| D2 | Backend in v1? | **No backend.** Reliable 7-day notice through in-app banner + Apps Script email; Web Push best effort. Local progress is per-device, with JSON backup. Add backend in M6+. | Avoids accounts, hosting and minors' data obligations; keeps v1 small. | §10, §11, §9.5 |
-| D3 | Minimum age / consent | Design for students **12+**. Since v1 stores no grades on a server, consent needs are minimized; **get a legal review before any backend or account system.** | Grades are sensitive; laws depend on server-side processing. | §11 |
-| D4 | Hebrew date display | **Off by default**, toggle in Settings. | Most students use the civil date; some want the Hebrew date. | §7 |
-| D5 | Teachers/schools pushing exam dates | No direct integration in v1. A teacher can be given edit access to the student's sheet, or share a class template that students copy. | Keeps grade data private per student. | §3.2, §8.1 |
-| D6 | Product name and logo | **Open** — owner: product owner. | Not a technical decision. | Header, PWA manifest |
-| D7 | Who fills the sheet? | The **student** owns and edits it by default; parents/teachers can be added as editors through normal Google sharing. The app does not care who edits. | Simplest; no roles to build. | F0, §8.1 |
-| D8 | One sheet per student or a class sheet? | **One sheet per student.** Class sheets are out of scope. | A shared sheet would expose other students' grades. | §1.4, §8.1 |
-| D9 | Grade rules and bagrut split | Scale 0–100; weights per grade row; pass mark default 55 (per subject configurable); bagrut `schoolWeight` per subject with **no hard-coded default** until confirmed. **Verify the school/exam split and pass marks against the current Ministry of Education circular before release.** | Research found conflicting splits (50/50 vs. 30/70). | §7.1, §9.8 |
-| D10 | 7-day notice format | **One notice per test, grouped by day** (mandatory) + optional **weekly digest** (P1). Tests already < 7 days away notify once, immediately. | Meets "notice a week before every test" without spamming. | F4, §9.5 |
-| D11 | Timetable changes during the year | `validFrom`/`validTo` for semester changes, a `date` column for one-off overrides, and a Holidays tab. | Covers substitutes and vacations without a complex editor. | §8.1, §9.2 |
-| D12 | Chart direction in Hebrew | Time axis runs in the **reading direction** (right-to-left); numbers stay LTR. | Consistent with the mirrored layout. | §7 |
-| D13 | How much on the main dashboard? | **Minimal:** 3 main widgets (next test hero + countdown, today's schedule, Today's Mission) + 7-day banner; other widgets move to their own pages. | Answered by the product owner; keeps the phone view calm. | §4 |
-| D14 | Dashboard by age/level | **Simple mode for grades 7–9**, full mode from grade 10. Simple mode hides the bagrut tracker, predicted final grade, readiness score and what-if slider; grade insights otherwise stay the same. | Answered by the product owner. | §4.2 |
-| D15 | Behind-status tone | **Gentle:** soft labels (On track / A bit tight / Needs a boost), amber not red, always a small next step; red only for time pressure. | Answered by the product owner. | §4.3, §6.4, §9.3 |
-| D16 | Adding tests without the sheet | **Local quick add** ("Local" tag, device-only, never written to the sheet); replaced by a matching sheet row on sync. | Answered by the product owner; keeps the sheet read-only. | F1 |
-| D17 | Main device | **Phone first**; desktop is the same widgets in a wider two-column layout. | Answered by the product owner. | §4, §11 |
-| D18 | 7-day notice on the dashboard | **Top banner** listing tests in the next 7 days. | Answered by the product owner. | §4, F4 |
+| ID | Question | Decision | Status | Why | Affects |
+|---|---|---|---|---|---|
+| D1 | Pre-filled bagrut subject/topic templates? | **Decide later.** Until then: not in v1; provide an example Topics tab students can copy. | Deferred | Content must be accurate and maintained; wrong syllabi would mislead. | §3.2, §8.1 |
+| D2 | Backend in v1? | **No backend.** Reliable 7-day notice through in-app banner + Apps Script email; Web Push best effort. Local progress is per-device, with JSON backup. Backend in M6+. | Decided | Avoids accounts, hosting and minors' data obligations; keeps v1 small. | §10, §11, §9.5 |
+| D3 | Minimum age / consent | Design for students **12+**. v1 stores no grades on a server, so consent needs are minimized; **legal review is a gate before any backend or account system.** | Decided | Grades are sensitive; laws depend on server-side processing. | §11 |
+| D4 | Hebrew date display | **On by default in Hebrew mode** (shown next to the civil date, computed from the standard Hebrew calendar library); off by default in English mode; toggle in Settings. | Decided | Product owner's choice: Hebrew-speaking students expect it. | §7 |
+| D5 | Teachers/schools pushing exam dates | No direct integration in v1. A teacher can be given edit access to the student's sheet, or share a class template that students copy. | Decided | Keeps grade data private per student. | §3.2, §8.1 |
+| D6 | Product name and logo | **Working title "StudyPlanner"** (placeholder, English) — final name and logo to be chosen later; all strings use a single `appName` constant so renaming is trivial. | Deferred | Not a technical decision. | Header, PWA manifest |
+| D7 | Who fills the sheet? | The **student** owns and edits it by default; parents/teachers can be added as editors through normal Google sharing. The app does not care who edits. | Decided | Simplest; no roles to build. | F0, §8.1 |
+| D8 | One sheet per student or a class sheet? | **One sheet per student.** Class sheets are out of scope. | Decided | A shared sheet would expose other students' grades. | §1.4, §8.1 |
+| D9 | Grade rules and bagrut split | Scale 0–100; weights per grade row; pass mark default 55 (per subject configurable). **Bagrut final grade = 70% bagrut exam + 30% school grade**, i.e., default `schoolWeight = 0.3`, still editable per subject in Settings/sheet. | Decided | Rule stated by the product owner. Secondary sources conflicted (50/50 vs. 30/70), so keep it editable if a subject differs. | §7.1, §9.8 |
+| D10 | 7-day notice format | **One notice per test, grouped by day** (mandatory) + optional **weekly digest** (P1). Tests already < 7 days away notify once, immediately. | Decided | Meets "notice a week before every test" without spamming. | F4, §9.5 |
+| D11 | Timetable changes during the year | `validFrom`/`validTo` for semester changes, a `date` column for one-off overrides, and a Holidays tab. | Decided | Covers substitutes and vacations without a complex editor. | §8.1, §9.2 |
+| D12 | Chart direction in Hebrew | Time axis runs in the **reading direction** (right-to-left); numbers stay LTR. | Decided | Consistent with the mirrored layout. | §7 |
+| D19 | Google access scope | **`spreadsheets.readonly` from the start** (sign in with Google, paste the sheet link/ID). No Picker/`drive.file` spike. **Start Google OAuth app verification early** (consent screen, privacy policy). | Decided | Product owner's choice: simplest sign-in flow; accepts verification lead time (§10.1, §11). | §10.1, §11, F0, §12 |
+| D13 | How much on the main dashboard? | **Minimal:** 3 main widgets (next test hero + countdown, today's schedule, Today's Mission) + 7-day banner; other widgets move to their own pages. | Decided | Answered by the product owner; keeps the phone view calm. | §4 |
+| D14 | Dashboard by age/level | **Simple mode for grades 7–9**, full mode from grade 10. Simple mode hides the bagrut tracker, predicted final grade, readiness score and what-if slider; grade insights otherwise stay the same. | Decided | Answered by the product owner. | §4.2 |
+| D15 | Behind-status tone | **Gentle:** soft labels (On track / A bit tight / Needs a boost), amber not red, always a small next step; red only for time pressure. | Decided | Answered by the product owner. | §4.3, §6.4, §9.3 |
+| D16 | Adding tests without the sheet | **Local quick add** ("Local" tag, device-only, never written to the sheet); replaced by a matching sheet row on sync. | Decided | Answered by the product owner; keeps the sheet read-only. | F1 |
+| D17 | Main device | **Phone first**; desktop is the same widgets in a wider two-column layout. | Decided | Answered by the product owner. | §4, §11 |
+| D18 | 7-day notice on the dashboard | **Top banner** listing tests in the next 7 days. | Decided | Answered by the product owner. | §4, F4 |
 
-**Still open (need information from outside this document):**
-1. Exact Ministry of Education rules per bagrut subject (school/exam split, pass marks, moed rules) — confirm and update §7.1/§9.8.
-2. Outcome of the M0 spike: does `drive.file` + Picker work with the Sheets API as expected? If not, the `spreadsheets.readonly` verification path applies.
-3. Legal review for minors' data before any backend (D3).
-4. Product name and logo (D6).
+**Open items:** none blocking v1 design. Two are consciously **deferred** (D1 bagrut templates, D6 final name/logo) and one is a **gate for later** (legal review before any backend, D3). The remaining risk is external: Google's OAuth verification for the `spreadsheets.readonly` scope (D19) takes calendar time, so it should be started in M0.
 
 ---
 
@@ -825,7 +822,7 @@ Checked on 2026-09-20.
 | Sheets API read quotas | [Google Sheets API usage limits](https://developers.google.com/sheets/api/limits) | 300 read requests/min/project, 60/min/user/project, no daily cap. |
 | OAuth scope classification | [Google Sheets API scopes](https://developers.google.com/sheets/api/scopes) | `spreadsheets` and `spreadsheets.readonly` are Sensitive; `drive.file` Non-sensitive; `drive` and `drive.readonly` Restricted. |
 | Periodic Background Sync | [MDN — Periodic Background Synchronization API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Periodic_Background_Synchronization_API) | Experimental, not Baseline; Chrome requires an installed web app and uses site engagement. |
-| Bagrut structure | [Wikipedia — Bagrut certificate](https://en.wikipedia.org/wiki/Bagrut_certificate) and other secondary sources | Pass mark 55 widely cited; school/exam split reported inconsistently (50/50 vs. 30/70) → **not hard-coded**, must be verified. |
+| Bagrut structure | [Wikipedia — Bagrut certificate](https://en.wikipedia.org/wiki/Bagrut_certificate) and other secondary sources | Pass mark 55 widely cited; school/exam split reported inconsistently (50/50 vs. 30/70). **Default set to 70% exam / 30% school by the product owner (D9)**; editable per subject. |
 | Ministry booklet | [Ministry of Education 2025 booklet](https://meyda.education.gov.il/files/pop/0files/english/Chativa-Elyona/Bagrut/updates/5pointsbooklet2025.pdf) | Navigational; did not state the grade formula. |
 | iOS Web Push requires installed PWA (16.4+) | Widely documented by Apple/WebKit; **not re-verified in this pass** | Keep the in-app banner and email as the guaranteed channels. |
-| `drive.file` + Picker with Sheets API | Not verified | **M0 spike required.** |
+| `drive.file` + Picker with Sheets API | Not verified | Not needed: D19 uses `spreadsheets.readonly`. |
