@@ -37,7 +37,8 @@ A single dashboard, **built around the student's school schedule and fed from Go
 
 ### 1.3 Success criteria
 - A new student can connect a sheet and see their first countdown in under **2 minutes** (under **60 seconds** for adding a first exam by hand).
-- The dashboard clearly flags any exam where the student is "behind" on study time.
+- The dashboard gently flags any exam where the student needs a boost on study time, always with a small next step (§4.3).
+- The main dashboard shows only **3 main widgets** (next test, today's schedule, Today's Mission) plus the 7-day banner, and is fully usable one-handed on a phone.
 - **100% of tests found in the sheet get a 7-day notice**, including tests added to the sheet less than 7 days ahead (notice fires on the next sync). The notice is delivered through at least one guaranteed channel (see §10.2): in-app banner and/or email.
 - Changes made in Google Sheets appear on the dashboard within **15 minutes** while the app is open (or immediately on manual refresh).
 - The per-subject average shown matches a manual calculation from the same sheet rows.
@@ -60,7 +61,7 @@ A single dashboard, **built around the student's school schedule and fed from Go
 
 | Persona | Age | Needs | Design implication |
 |---|---|---|---|
-| **Middle schooler** (grades 7–9, ז–ט) | 12–15 | Simple view of upcoming tests; friendly reminders; low setup effort | Simple defaults, playful but not childish tone, few required fields, analytics hidden behind "More" |
+| **Middle schooler** (grades 7–9, ז–ט) | 12–15 | Simple view of upcoming tests; friendly reminders; low setup effort | Simple defaults, playful but not childish tone, few required fields, **simple mode** (bagrut tracker, predictions and readiness score hidden, §4.2) |
 | **High schooler** (grades 10–11, י–יא) | 15–17 | Many subjects, overlapping tests, planning ahead | Calendar view, per-subject readiness, plan generator, test-cluster warnings |
 | **Bagrut-year student** (grade 12, יב) | 17–19 | High-stakes exams, large syllabi, moed A/B, weighted subjects (units/יחידות) | Bagrut tracker, topic-level progress, readiness score, predicted final grade |
 
@@ -91,7 +92,10 @@ Priority key used in this document: **P0** = must be in v1, **P1** = should be i
 - Holidays / days off come from the **Holidays** tab or from a `Schedule` row with `type = off`. One-off changes (substitute lesson, cancelled lesson) are Schedule rows with a specific `date`.
 
 #### F1. Exams & tests manager (P0)
-- Tests are **loaded from the Exams tab** of the sheet (subject, title, **type**, date & time, weight, topics, notes). Manual add/edit in the app is optional and local-only.
+- Tests are **loaded from the Exams tab** of the sheet (subject, title, **type**, date & time, weight, topics, notes).
+- **Quick add (P0):** the dashboard "+" button adds a **local test** (subject, title, type, date, time) for students who don't want to edit the sheet. Local tests are tagged "Local", stored only on the device, **never written to the sheet**, and get the same countdown, plan and mandatory 7-day notice as sheet tests.
+  - **Duplicate handling:** when a later sync brings a sheet test with the same subject and date (and a similar title), the sheet test replaces the local one and the student sees a small "Now synced from your sheet" note.
+  - Local tests can be edited or deleted in the app; sheet tests cannot (the sheet is the source of truth).
 - **Exam types:** quiz (בוחן), test (מבחן), exam (בחינה), project deadline, bagrut (בגרות) with moed A / moed B.
 - Exams sorted by date; past exams move to a "Done" archive with an optional score and a short reflection (§3.3).
 
@@ -104,7 +108,7 @@ Priority key used in this document: **P0** = must be in v1, **P1** = should be i
   - **Time available** = study hours the student has free between now and the exam (from the school schedule and manual blocks).
   - **Time needed** = recommended study hours (from weight, difficulty, and number of topics).
   - **Time logged** = hours already studied.
-- Shows a **readiness status:** `On track` / `Tight` / `Behind`, plus the number of minutes to add per day to catch up.
+- Shows a soft **readiness status:** *On track* / *A bit tight* / *Needs a boost* (wording and tone in §4.3), plus the number of minutes to add per day as a gentle suggestion.
 - Formula details in §9.
 
 #### F4. Reminders & notifications (P0)
@@ -175,7 +179,7 @@ Priority key used in this document: **P0** = must be in v1, **P1** = should be i
 | S6 | **Spaced revision** | P1 | Auto-adds short revision tasks +1, +3 and +7 days after finishing a topic, if before the exam (§9.15). |
 | S7 | **Streaks & weekly goal** | P1 | A day counts when the student logs ≥ 20 min or finishes a Mission task. One automatic "freeze" per week. Streaks **pause** rather than "break"; wording stays encouraging (§9.15). Weekly goal default 5 h, configurable. |
 | S8 | **Focus timer** | P1 | Pomodoro 25/5 (configurable) tied to the study log; screen-friendly full-screen mode; optional chime. |
-| S9 | **Catch-up mode** | P1 | After ≥ 2 missed days or a "Behind" status, offers a lighter re-plan ("Keep it small: 3 × 20 min today"). |
+| S9 | **Catch-up mode** | P1 | After ≥ 2 missed days or a "Needs a boost" status, offers a lighter re-plan ("Keep it small: 3 × 20 min today"). |
 | S10 | **Achievements** | P2 | Quiet badges (first week streak, all Mission tasks done, grade improvement) — never tied to grade values alone. |
 | S11 | **Quiet mode** | P1 | One toggle that silences everything except the mandatory 7-day notice for the next 24 h (e.g., during a holiday). |
 
@@ -192,32 +196,64 @@ Priority key used in this document: **P0** = must be in v1, **P1** = should be i
 | A7 | **Study-vs-grade insight** | P2 | Shown only with ≥ 5 (study hours, grade) pairs. Labeled as a *pattern*, never as cause; can be hidden in Settings. |
 | A8 | **Bagrut average** | P1 | Average across bagrut subjects weighted by units (§9.8). |
 
+A3, A4, A5 (what-if slider) and A8 are **hidden in simple mode** (grades 7–9, §4.2); A1, A2, A6 and the basic "grade needed for my target" stay available to everyone.
+
 Guardrails for analytics: always show the number of grades used; never show a prediction or trend with too little data; no comparisons with other students; low-grade states use supportive wording ("This one needs some attention").
 
 ---
 
 ## 4. Dashboard Layout
 
-The dashboard is the home screen. Widgets are cards on a responsive grid (12 columns desktop, single column mobile). Order below is desktop, top-to-bottom, left-to-right.
+The dashboard is the home screen and is deliberately **minimal**: **three main widgets** plus the 7-day banner, a header grades chip and a quick-add button. Everything else lives on its own page one tap away. It is designed **phone-first** (single column, thumb-reachable actions); on desktop it becomes a wider two-column layout of the same widgets, not a different design.
+
+Reading order on a phone (top to bottom):
 
 | # | Widget | Content | Notes |
 |---|---|---|---|
-| 1 | **Next exam hero card** | Subject, title, date, lesson slot (from schedule), big countdown (d/h/m), readiness badge, "Start studying" button | Largest card; accent gradient border matching urgency |
-| 2 | **One-week notice banner** | "Tests in the next 7 days" — every test that has entered its 7-day window, with days left and hours free to study; includes test-cluster warning when relevant | Shown at the top while at least one test is ≤ 7 days away; dismissible per session, never removed from the exam list |
-| 3 | **Today's schedule** | Today's lessons in order (time, subject, room), current/next lesson highlighted, tests of the day flagged | Driven by the **Schedule** tab; empty on days off |
-| 4 | **Today's Mission** | Up to 3 tasks with duration, start button, streak flame and weekly-goal ring | Replaces a long checklist on small screens |
-| 5 | **Countdown strip** | Horizontally scrollable chips of the next 5–6 exams with days left | Click to open exam details |
-| 6 | **Grades overview** | Overall average (large number) + one row per subject with its average, trend arrow and mini sparkline; weak subjects marked | Sorted by subject or by lowest average; tap for grade history |
-| 7 | **This week** | Mini week agenda: lessons, exams, tasks, blocked days | Links to full calendar |
-| 8 | **Study hours** | Bar chart: hours studied per day this week vs. goal | Recharts |
-| 9 | **Subject readiness** | One row per subject: progress bar of (logged ÷ needed) with status color | Sorted by urgency |
-| 10 | **Bagrut tracker** | List of bagrut subjects, units, moed dates, done/remaining, current average, readiness score | Hidden if the student has no bagrut exams |
-| 11 | **Quick add** | Floating "+" button: add local exam / log session / add task | Always visible |
+| 0 | **7-day notice banner** | "Tests in the next 7 days" — a full-width banner listing every test that has entered its 7-day window, with days left and free study hours; includes the test-cluster warning when relevant | Shown at the very top while at least one test is ≤ 7 days away; a student can collapse it for the session, it returns on the next open, and it disappears once the tests have passed |
+| 1 | **Next test hero + countdown** | Subject, title, date, lesson slot (from schedule), big countdown (d/h/m), soft readiness badge, "Start studying" button; a small row of the next 2–3 tests as chips below it | **First thing the student sees** (below the banner). Largest card; accent gradient border matching urgency |
+| 2 | **Today's schedule** | Today's lessons in order (time, subject, room), current/next lesson highlighted, tests of the day flagged | Driven by the **Schedule** tab; on days off shows free study time |
+| 3 | **Today's Mission** | Up to 3 tasks with duration, start button, streak flame and weekly-goal ring | Replaces a long checklist on small screens |
 
-**Header:** logo, language toggle (HE/EN), **sync status ("Updated 3 min ago" + Refresh)**, notifications bell, avatar/settings.
-**Navigation:** left sidebar on desktop (right side in RTL), bottom tab bar on mobile: Dashboard · Schedule · Calendar · Exams · Grades · Settings.
+Also on the dashboard:
+- **Header:** logo, language toggle (HE/EN), **overall-average chip** (e.g., "Avg 86.4"; tap opens the Grades page; hidden until at least one grade exists), **sync status ("Updated 3 min ago" + Refresh)**, notifications bell, avatar/settings.
+- **Quick add:** floating "+" button → add a **local** test (§3.1 F1), log a session, or add a task.
+- **Navigation:** left sidebar on desktop (right side in RTL), bottom tab bar on mobile: Dashboard · Schedule · Calendar · Exams · Grades · Settings.
+
+**Where the other widgets moved** (nothing is dropped):
+
+| Former widget | Now lives on |
+|---|---|
+| Grades overview (per-subject averages, trends, sparklines) | **Grades** page |
+| This week (mini agenda), workload heat map | **Calendar** page |
+| Study hours chart, streak and weekly-goal detail | **Study log** page |
+| Subject readiness | **Exams** page (per exam) and Exam detail |
+| Bagrut tracker | **Bagrut tracker** page (hidden in simple mode, §4.2) |
 
 **Empty states:** friendly illustration + one clear call to action ("Connect your Google Sheet" / "Add your first exam").
+
+### 4.2 Simple mode and full mode
+The student's **grade level** chosen at onboarding sets the default mode; it can be changed in Settings at any time.
+
+| | **Simple mode** (grades 7–9, ז–ט) | **Full mode** (grades 10–12, י–יב) |
+|---|---|---|
+| Dashboard | Same 3 widgets + banner | Same 3 widgets + banner |
+| Grades | Averages, trend, weak-subject flag, targets and "grade needed" — **same as full** | Same |
+| **Hidden in simple mode** | **Bagrut tracker** (page and tab), **predicted final grade (A3)**, **readiness score (A4)** and the what-if slider (A5) | Available |
+| Wording | Shorter, friendlier copy; fewer options in Settings | Full options |
+
+Test-cluster warnings and the workload heat map stay available in both modes.
+
+### 4.3 Readiness wording and tone
+The app never shames a student for being behind. Status labels are soft, and **red is reserved for time pressure** (a test in under 24 hours), not for the student's progress.
+
+| Internal state (§9.3) | EN label | HE label | Color |
+|---|---|---|---|
+| ratio ≥ 1.25 | On track | בקצב טוב | `--ok` |
+| 0.9 ≤ ratio < 1.25 | A bit tight | קצת צפוף | `--warn` |
+| ratio < 0.9 | Needs a boost | דרושה תוספת | `--warn` (stronger fill) + icon |
+
+Every non-green state shows a **small, doable next step** instead of a warning, e.g. "A small boost: +25 min a day gets you there" / "תוספת קטנה של 25 דקות ביום תעשה את ההבדל" and a one-tap lighter plan (catch-up mode, S9). The label always comes with an icon and text, never color alone.
 
 ### 4.1 Screen specifications
 
@@ -227,17 +263,17 @@ Common to every screen:
 - **RTL:** all layouts flip via logical properties (§7). Copy below shows **EN / HE**. Hebrew copy is gender-neutral (nouns, infinitives, "יש לך").
 
 #### 4.1.1 Onboarding (first run)
-- **Steps (4 screens, skippable where possible):** 1) language → 2) grade level (ז–יב) → 3) connect the Google Sheet (or "Open the template") → 4) notifications and channel choice, with a short explanation of the mandatory 7-day notice.
+- **Steps (4 screens, skippable where possible):** 1) language → 2) grade level (ז–יב), which sets **simple mode** (ז–ט) or **full mode** (י–יב), see §4.2 → 3) connect the Google Sheet (or "Open the template") → 4) notifications and channel choice, with a short explanation of the mandatory 7-day notice.
 - **Layout:** centered card, progress dots, one primary button.
 - **Copy:** "Connect your Google Sheet" / "חיבור גיליון Google"; "Use the template" / "שימוש בתבנית"; "You'll get a notice 7 days before every test" / "תישלח התראה 7 ימים לפני כל מבחן".
 - **Errors:** wrong sheet structure → list of missing tabs/columns with a link to the template ("Missing tab: Exams" / "חסרה לשונית: Exams").
 
 #### 4.1.2 Dashboard
-- Widgets per §4 table. Above the fold on mobile: greeting, notice banner (if any), hero card, Today's Mission.
+- Widgets per §4 table: 7-day banner (if any) → next-test hero → today's schedule → Today's Mission. The header shows the overall-average chip. On a phone the hero card and the banner are both visible without scrolling.
 - **Greeting:** "Good evening" / "ערב טוב" (no name required).
 - **Empty:** "No sheet connected yet" / "עדיין לא חובר גיליון" + button "Connect" / "חיבור".
 - **Banner copy:** "3 tests in the next 7 days" / "3 מבחנים בשבוע הקרוב"; cluster: "3 tests in 4 days — start by Sun 21 Sep" / "3 מבחנים ב-4 ימים — כדאי להתחיל עד יום א׳, 21.9".
-- **Readiness badges:** On track / בקצב טוב · Tight / צפוף · Behind / בפיגור (always icon + text).
+- **Readiness badges:** On track / בקצב טוב · A bit tight / קצת צפוף · Needs a boost / דרושה תוספת (always icon + text; tone rules in §4.3).
 
 #### 4.1.3 Schedule
 - **Purpose:** the weekly timetable and today's context.
@@ -259,7 +295,7 @@ Common to every screen:
 #### 4.1.6 Exam detail
 - **Header:** subject, title, type/moed, date, lesson slot, big countdown.
 - **Sections:** readiness card (available / needed / logged, formula on tap) · study plan (task list, move/skip/regenerate) · topics with confidence sliders and progress · prep checklist · reminders (7-day notice always on; other lead times toggles) · notes · after the date: post-exam reflection and actual grade when it appears.
-- **Copy:** "Time available 9h · needed 12h · logged 3h" / "זמן פנוי 9 ש׳ · נדרש 12 ש׳ · נלמד 3 ש׳"; behind: "Add 25 min a day to catch up" / "כדאי להוסיף 25 דקות ביום כדי להשלים פערים".
+- **Copy:** "Time available 9h · needed 12h · logged 3h" / "זמן פנוי 9 ש׳ · נדרש 12 ש׳ · נלמד 3 ש׳"; needs a boost: "A small boost: +25 min a day gets you there" / "תוספת קטנה של 25 דקות ביום תעשה את ההבדל".
 
 #### 4.1.7 Grades overview
 - **Header:** overall average (large), bagrut average (units-weighted, if applicable), number of grades, last-updated.
@@ -295,7 +331,7 @@ Common to every screen:
 #### 4.1.13 Bagrut tracker
 - **Layout:** table/cards per bagrut subject: units, school grade (ציון מגן), moed A/B dates, exam grade (when known), final grade calculator, readiness score with breakdown, topic coverage bar.
 - **Summary row:** bagrut average weighted by units (§9.8).
-- **Empty / non-bagrut students:** screen hidden from navigation.
+- **Hidden from navigation** in simple mode (grades 7–9) and for students without bagrut subjects.
 
 ---
 
@@ -305,7 +341,7 @@ Common to every screen:
 2. **New test appears in the sheet:** next sync picks it up → dashboard shows it → if ≤ 7 days away a notice fires now, otherwise it fires exactly 7 days before → plan generated from free time in the schedule.
 3. **Seven days before a test:** in-app banner / email / push with days left and study hours available → tap → exam details with plan → accept or adjust plan.
 4. **Daily use:** open dashboard → check Today's schedule and Today's Mission → start timer → finish tasks → see readiness and streak update.
-5. **Falling behind:** dashboard flags "Behind" → tap → "Rebalance plan" suggests extra time per day → accept (or use catch-up mode).
+5. **Needing a boost:** hero card shows "Needs a boost" with a small suggestion → tap → lighter catch-up plan (+ minutes per day) → accept or dismiss.
 6. **Exam date changes in the sheet:** next sync updates the exam → plan and reminders (including the 7-day notice) regenerate automatically.
 7. **New grade added in the sheet:** next sync updates that subject's average and trend; a toast shows "Math average: 87.4 (+1.2)"; post-exam reflection is compared with the real grade.
 8. **Sheet problem:** invalid rows or lost access → "Sync issues" panel explains what to fix; cached data stays visible.
@@ -332,8 +368,8 @@ Defined as CSS variables so they can be tuned in one place.
 | `--primary-glow` | `rgba(124,108,255,.35)` | Glows and focus rings |
 | `--accent` | `#3DDBD9` | Secondary accent (teal), charts, highlights |
 | `--ok` | `#3DDC97` | On track / done |
-| `--warn` | `#FFB454` | Tight / soon |
-| `--urgent` | `#FF6B7A` | Behind / very close exam |
+| `--warn` | `#FFB454` | A bit tight / Needs a boost / soon |
+| `--urgent` | `#FF6B7A` | Time pressure only (test within 24 h) |
 
 Subject colors: a fixed 10-color palette of medium-saturation hues, all tested against `--surface` for AA contrast.
 
@@ -358,7 +394,7 @@ Subject colors: a fixed 10-color palette of medium-saturation hues, all tested a
 | 1–3 days | `--warn` | Subtle glow |
 | < 24 hours | `--urgent` | Glow + gentle pulse (respects reduced motion) |
 
-Readiness status uses `--ok` / `--warn` / `--urgent` **plus an icon and label**, never color alone.
+Readiness status uses `--ok` / `--warn` (soft labels, §4.3) **plus an icon and label**, never color alone. `--urgent` (red) is used **only for time pressure** — a test in under 24 hours or a mandatory notice that just fired — never to describe the student's progress.
 
 ### 6.5 Components
 Card, stat tile, countdown, progress bar, progress ring, chip, checklist item, modal/sheet, toast, form controls, tabs, sidebar, bottom nav, empty state, calendar cell, timetable cell, sparkline, heat-map cell, streak flame, notice banner, info ("how is this calculated?") bottom sheet.
@@ -540,10 +576,10 @@ remainingNeeded = max(0, needed − logged)
 ratio           = available / remainingNeeded      (∞ if remainingNeeded = 0)
 
 status = ratio ≥ 1.25 → "On track"
-         ratio ≥ 0.9  → "Tight"
-         else         → "Behind"
+         ratio ≥ 0.9  → "A bit tight"
+         else         → "Needs a boost"                 (labels and tone: §4.3)
 
-extraPerDay = (remainingNeeded − available) / daysLeft   (shown when Behind)
+extraPerDay = (remainingNeeded − available) / daysLeft   (shown as a gentle suggestion when not "On track")
 ```
 
 ### 9.4 Plan generation
@@ -765,6 +801,12 @@ Decisions below are **proposed** defaults that resolve the earlier open question
 | D10 | 7-day notice format | **One notice per test, grouped by day** (mandatory) + optional **weekly digest** (P1). Tests already < 7 days away notify once, immediately. | Meets "notice a week before every test" without spamming. | F4, §9.5 |
 | D11 | Timetable changes during the year | `validFrom`/`validTo` for semester changes, a `date` column for one-off overrides, and a Holidays tab. | Covers substitutes and vacations without a complex editor. | §8.1, §9.2 |
 | D12 | Chart direction in Hebrew | Time axis runs in the **reading direction** (right-to-left); numbers stay LTR. | Consistent with the mirrored layout. | §7 |
+| D13 | How much on the main dashboard? | **Minimal:** 3 main widgets (next test hero + countdown, today's schedule, Today's Mission) + 7-day banner; other widgets move to their own pages. | Answered by the product owner; keeps the phone view calm. | §4 |
+| D14 | Dashboard by age/level | **Simple mode for grades 7–9**, full mode from grade 10. Simple mode hides the bagrut tracker, predicted final grade, readiness score and what-if slider; grade insights otherwise stay the same. | Answered by the product owner. | §4.2 |
+| D15 | Behind-status tone | **Gentle:** soft labels (On track / A bit tight / Needs a boost), amber not red, always a small next step; red only for time pressure. | Answered by the product owner. | §4.3, §6.4, §9.3 |
+| D16 | Adding tests without the sheet | **Local quick add** ("Local" tag, device-only, never written to the sheet); replaced by a matching sheet row on sync. | Answered by the product owner; keeps the sheet read-only. | F1 |
+| D17 | Main device | **Phone first**; desktop is the same widgets in a wider two-column layout. | Answered by the product owner. | §4, §11 |
+| D18 | 7-day notice on the dashboard | **Top banner** listing tests in the next 7 days. | Answered by the product owner. | §4, F4 |
 
 **Still open (need information from outside this document):**
 1. Exact Ministry of Education rules per bagrut subject (school/exam split, pass marks, moed rules) — confirm and update §7.1/§9.8.
