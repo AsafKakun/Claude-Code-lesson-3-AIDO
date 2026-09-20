@@ -51,6 +51,8 @@
     done: store.get('done', {}),
     missionIds: store.get('mission', {}),
     confidence: store.get('confidence', {}),
+    manualGrades: store.get('manualGrades', []), // { id, subject, grade, date, title } — weight is always 1
+    manualLessons: store.get('manualLessons', []), // { id, weekday 1-7, start, end, subject, room }
     settings: { dailyCapMin: 180, weeklyGoalMin: 300, weakThreshold: 70, showHebrewDate: true },
     bannerCollapsed: false,
     rev: 0,
@@ -93,17 +95,21 @@
     if (state.memo && state.memo.key === key) return state.memo.value;
     let value;
     const p = state.parsed;
-    if (!p.sheet && !p.calendar && !p.grades) {
+    const hasManual = state.manualGrades.length > 0 || state.manualLessons.length > 0;
+    if (!p.sheet && !p.calendar && !p.grades && !hasManual) {
       value = SP.sample.build(now(), state.lang);
       value.isSample = true;
     } else {
       const base = p.sheet ? p.sheet.data : { subjects: [], schedule: [], exams: [], grades: [], holidays: [] };
       const exams = [...base.exams];
       if (p.calendar) exams.push(...p.calendar.data.exams.filter((c) => !exams.some((e) => e.subject === c.subject && e.date === c.date)));
-      const grades = [...base.grades, ...(p.grades ? p.grades.data.grades : [])];
+      // hand-entered grades never ask for a weight: every one counts as 1
+      const manualGrades = state.manualGrades.map((g) => ({ date: g.date, subject: g.subject, title: g.title || '', grade: g.grade, weight: 1, id: g.id, manual: true }));
+      const grades = [...base.grades, ...(p.grades ? p.grades.data.grades : []), ...manualGrades];
+      const schedule = [...base.schedule, ...manualSchedule()];
       const subjects = base.subjects.map((s) => ({ ...s }));
-      // subjects that only appear in exams / grades get a colour too; names are matched loosely (quotes, niqqud)
-      for (const name of [...exams.map((e) => e.subject), ...grades.map((g) => g.subject)]) {
+      // subjects that only appear in exams / grades / lessons get a colour too; names are matched loosely (quotes, niqqud)
+      for (const name of [...exams.map((e) => e.subject), ...grades.map((g) => g.subject), ...schedule.map((l) => l.subject).filter(Boolean)]) {
         if (!subjects.some((s) => SH.sameSubject(s.name, name))) subjects.push({ name, color: SH.PALETTE[subjects.length % SH.PALETTE.length], targetAverage: null });
       }
       // make grade subjects use the same spelling as the exam / schedule subject
@@ -111,10 +117,28 @@
         const s = subjects.find((x) => SH.sameSubject(x.name, g.subject));
         if (s) g.subject = s.name;
       }
-      value = { subjects, schedule: base.schedule, holidays: base.holidays, exams, grades, isSample: false };
+      // make lessons use the same subject spelling as the rest, too
+      for (const l of schedule) {
+        const s = l.subject && subjects.find((x) => SH.sameSubject(x.name, l.subject));
+        if (s) l.subject = s.name;
+      }
+      value = { subjects, schedule, holidays: base.holidays, exams, grades, isSample: false };
     }
     state.memo = { key, value };
     return value;
+  }
+
+  // hand-entered timetable: one row per weekday; periods are numbered by start time
+  function manualSchedule() {
+    const byDay = {};
+    state.manualLessons.forEach((l) => (byDay[l.weekday] = byDay[l.weekday] || []).push(l));
+    const out = [];
+    for (const wd of Object.keys(byDay)) {
+      byDay[wd]
+        .sort((a, b) => L.timeToMin(a.start) - L.timeToMin(b.start))
+        .forEach((l, i) => out.push({ ...l, date: null, period: String(i + 1), teacher: '', type: 'lesson', validFrom: null, validTo: null, manual: true }));
+    }
+    return out;
   }
 
   const hydrateLocal = (e) => {
@@ -177,7 +201,10 @@
   // ---------- render: top bar ----------
   function renderTop() {
     const g = L.gradeSummary(data().grades, data().subjects, state.settings);
-    const avg = g.overall !== null ? `<button class="chip chip-avg" data-action="grades" title="${esc(t('avgTitle'))}" aria-label="${esc(t('avgTitle'))}">${esc(t('avg'))} <strong>${g.overall.toFixed(1)}</strong></button>` : '';
+    // with no grades yet the chip still opens the grades dialog, so the first grade can be entered by hand
+    const avg = g.overall !== null
+      ? `<button class="chip chip-avg" data-action="grades" title="${esc(t('avgTitle'))}" aria-label="${esc(t('avgTitle'))}">${esc(t('avg'))} <strong>${g.overall.toFixed(1)}</strong></button>`
+      : `<button class="chip" data-action="grades">${esc(t('grades'))}</button>`;
     let status;
     if (hasSources()) {
       const cls = anyError() ? ' err' : '';
@@ -185,7 +212,7 @@
       status = `<span class="chip chip-status${cls}" role="status">${esc(text)}</span>
         <button class="chip chip-icon" data-action="refresh" aria-label="${esc(t('refresh'))}" title="${esc(t('refresh'))}">⟳</button>`;
     } else {
-      status = `<span class="chip chip-status">${esc(t('sample'))}</span>`;
+      status = `<span class="chip chip-status">${esc(data().isSample ? t('sample') : t('manualData'))}</span>`;
     }
     $('#topbar').innerHTML = `
       <div class="logo"><i aria-hidden="true">✦</i>${esc(t('appName'))}</div>
@@ -280,7 +307,7 @@
     const minNow = n.getHours() * 60 + n.getMinutes();
     let body;
     if (!d.schedule.length) {
-      body = `<div class="empty">${esc(t('noSchedule'))}${
+      body = `<div class="empty">${esc(t('noSchedule'))}<div style="margin-block-start:10px"><button class="btn" data-action="timetable">${esc(t('addLesson'))}</button></div>${
         todaysTests.length ? '<ul class="lessons" style="margin-block-start:10px">' + todaysTests.map((x) => `<li class="lesson"><span class="bar" style="background:${color(x.subject)}"></span><span class="name">${label(x.subject, x.title)}</span><span class="pill test">${esc(t('testToday'))}</span></li>`).join('') + '</ul>' : ''
       }</div>`;
     } else if (!lessons.length) {
@@ -306,7 +333,8 @@
           .join('') +
         '</ul>';
     }
-    $('#schedule').innerHTML = `<div class="card"><div class="card-title"><span>${esc(t('schedule'))}</span><span>${esc(fmtDate(n))}</span></div>${body}</div>`;
+    $('#schedule').innerHTML = `<div class="card"><div class="card-title"><span>${esc(t('schedule'))} · ${esc(fmtDate(n))}</span>
+      <button class="chip" style="min-height:32px;padding:2px 10px;font-size:13px" data-action="timetable">✎ ${esc(t('editTimetable'))}</button></div>${body}</div>`;
   }
 
   // ---------- render: Today's Mission ----------
@@ -415,6 +443,117 @@
   }
 
   // ---------- dialogs ----------
+  const showDlg = (sel) => {
+    const d = $(sel);
+    if (!d.open) d.showModal();
+  };
+  const subjectList = () => `<datalist id="dlSubjects">${data().subjects.map((s) => `<option value="${esc(s.name)}"></option>`).join('')}</datalist>`;
+  const parseGradeInput = (s) => {
+    const v = parseFloat(String(s).replace(',', '.'));
+    return isFinite(v) && v >= 0 && v <= 100 ? v : null;
+  };
+
+  // "+" button: choose what to add
+  function openMenu() {
+    $('#dlgAdd').innerHTML = `<div class="dlg-body"><h2>${esc(t('addWhat'))}</h2>
+      <button class="btn btn-block" data-action="menuTest">📝 ${esc(t('addTest'))}</button>
+      <button class="btn btn-block" data-action="menuGrade">🎯 ${esc(t('addGrade'))}</button>
+      <button class="btn btn-block" data-action="menuLesson">📚 ${esc(t('addLesson'))}</button>
+      <div class="actions"><button class="btn" data-action="closeDlg">${esc(t('cancel'))}</button></div></div>`;
+    showDlg('#dlgAdd');
+  }
+
+  // manual grade — subject, grade, date; never asks for a weight (it is always 1)
+  function openGradeForm(msg) {
+    const today = L.ymd(now());
+    $('#dlgAdd').innerHTML = `<form method="dialog" class="dlg-body" id="formGrade">
+      <h2>${esc(t('addGrade'))}</h2>
+      <div class="field"><label for="gSubject">${esc(t('fSubject'))}</label><input id="gSubject" list="dlSubjects" maxlength="60" autocomplete="off" required></div>${subjectList()}
+      <div class="row"><div class="field"><label for="gGrade">${esc(t('fGrade'))}</label><input id="gGrade" inputmode="decimal" autocomplete="off" required></div>
+        <div class="field"><label for="gDate">${esc(t('fDate'))}</label><input id="gDate" type="date" value="${today}" max="${today}" required></div></div>
+      <div class="field"><label for="gTitle">${esc(t('fTitleOpt'))}</label><input id="gTitle" maxlength="60"></div>
+      <div id="gMsg">${msg ? `<div class="err-box">${esc(msg)}</div>` : ''}</div>
+      <div class="actions"><button type="button" class="btn" data-action="closeDlg">${esc(t('cancel'))}</button>
+        <button type="submit" class="btn btn-primary">${esc(t('save'))}</button></div></form>`;
+    showDlg('#dlgAdd');
+    $('#gSubject').focus();
+    $('#formGrade').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const subject = $('#gSubject').value.trim();
+      const grade = parseGradeInput($('#gGrade').value);
+      const date = $('#gDate').value || L.ymd(now());
+      const fail = (key) => {
+        $('#gMsg').innerHTML = `<div class="err-box">${esc(t(key))}</div>`;
+      };
+      if (!subject) return fail('needSubject');
+      if (grade === null) return fail('badGradeInput');
+      state.manualGrades.push({ id: 'mg' + Date.now(), subject, grade, date, title: $('#gTitle').value.trim() });
+      store.set('manualGrades', state.manualGrades);
+      $('#dlgAdd').close();
+      bump();
+      render();
+      toast(t('gradeSaved'));
+    });
+  }
+
+  // manual timetable: add one lesson to one or several weekdays
+  function openTimetable(msg) {
+    const d = data();
+    const weekly = d.schedule.filter((l) => !l.date && l.type !== 'off' && l.weekday);
+    const todayWd = L.weekdayOf(now());
+    const defaultDay = todayWd <= 6 ? todayWd : 1;
+    const days = [1, 2, 3, 4, 5, 6, 7]
+      .map((wd) => {
+        const list = weekly.filter((l) => l.weekday === wd).sort((a, b) => L.timeToMin(a.start) - L.timeToMin(b.start));
+        if (!list.length) return '';
+        return `<div><div class="note" style="margin-block:8px 4px"><b>${esc(t('wd')[wd - 1])}</b></div><ul class="lessons">${list
+          .map(
+            (l) => `<li class="lesson"><span class="bar" style="background:${color(l.subject)}"></span>
+              <span class="time">${esc(l.start)}–${esc(l.end)}</span>
+              <span class="name"><bdi>${esc(l.subject)}</bdi>${l.room ? ` <span class="room">· <bdi>${esc(l.room)}</bdi></span>` : ''}</span>
+              ${l.manual ? `<button class="btn btn-danger" style="min-height:36px;padding:2px 10px" data-action="delLesson" data-id="${esc(l.id)}" aria-label="${esc(t('delete'))}">✕</button>` : `<span class="tag">${esc(t('fromSheet'))}</span>`}</li>`
+          )
+          .join('')}</ul></div>`;
+      })
+      .join('');
+    $('#dlgTimetable').innerHTML = `<div class="dlg-body"><h2>${esc(t('timetable'))}</h2>
+      ${days || `<div class="empty">${esc(t('noLessonsYet'))}<br>${esc(t('addLessonHint'))}</div>`}
+      <form id="formLesson" class="src" style="margin-block-start:8px">
+        <h3>${esc(t('addLesson'))}</h3>
+        <div class="field"><label for="lSubject">${esc(t('fSubject'))}</label><input id="lSubject" list="dlSubjects" maxlength="60" autocomplete="off" required></div>${subjectList()}
+        <div class="field"><span class="note">${esc(t('fDays'))}</span><div class="daychips">${[1, 2, 3, 4, 5, 6, 7]
+          .map((wd) => `<label class="daychip"><input type="checkbox" name="wd" value="${wd}"${wd === defaultDay ? ' checked' : ''}><span>${esc(t('wdShort')[wd - 1])}</span></label>`)
+          .join('')}</div></div>
+        <div class="row"><div class="field"><label for="lStart">${esc(t('fStart'))}</label><input id="lStart" type="time" value="08:00" required></div>
+          <div class="field"><label for="lEnd">${esc(t('fEnd'))}</label><input id="lEnd" type="time" value="08:45" required></div>
+          <div class="field"><label for="lRoom">${esc(t('fRoom'))}</label><input id="lRoom" maxlength="20"></div></div>
+        <div id="lMsg">${msg ? `<div class="err-box">${esc(msg)}</div>` : ''}</div>
+        <div class="actions"><button type="submit" class="btn btn-primary">${esc(t('addLesson'))}</button></div>
+      </form>
+      <div class="actions"><button class="btn" data-action="closeDlg">${esc(t('close'))}</button></div></div>`;
+    showDlg('#dlgTimetable');
+    $('#formLesson').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const subject = $('#lSubject').value.trim();
+      const start = $('#lStart').value;
+      const end = $('#lEnd').value;
+      const wds = [...document.querySelectorAll('#formLesson input[name=wd]:checked')].map((x) => +x.value);
+      const fail = (key) => {
+        $('#lMsg').innerHTML = `<div class="err-box">${esc(t(key))}</div>`;
+      };
+      if (!subject) return fail('needSubject');
+      if (!wds.length) return fail('needDays');
+      if (!start || !end || L.timeToMin(end) <= L.timeToMin(start)) return fail('badTimes');
+      const room = $('#lRoom').value.trim();
+      wds.forEach((wd) => state.manualLessons.push({ id: 'ml' + Date.now() + wd, weekday: wd, start, end, subject, room }));
+      store.set('manualLessons', state.manualLessons);
+      bump();
+      render();
+      openTimetable();
+      toast(t('lessonsSaved'));
+    });
+  }
+
   function openAdd() {
     const d = data();
     const tomorrow = L.ymd(L.addDays(L.startOfDay(now()), 1));
@@ -430,7 +569,7 @@
         <div class="field"><label for="fTime">${esc(t('fTime'))}</label><input id="fTime" type="time" value="09:00" required></div></div>
       <div class="actions"><button type="button" class="btn" data-action="closeDlg">${esc(t('cancel'))}</button>
         <button type="submit" class="btn btn-primary">${esc(t('save'))}</button></div></form>`;
-    $('#dlgAdd').showModal();
+    showDlg('#dlgAdd');
     $('#formAdd').addEventListener('submit', (ev) => {
       ev.preventDefault();
       const subject = $('#fSubject').value;
@@ -502,6 +641,7 @@
   function openGrades() {
     const g = L.gradeSummary(data().grades, data().subjects, state.settings);
     const trendText = { rising: t('trendRising'), stable: t('trendStable'), falling: t('trendFalling') };
+    const manual = [...state.manualGrades].sort((a, b) => b.date.localeCompare(a.date));
     const rows = g.rows
       .map((r) => `<li class="g-row"><span class="bar" style="background:${r.subject.color}"></span>
         <div><div class="g-name"><bdi>${esc(r.subject.name)}</bdi></div>
@@ -514,7 +654,14 @@
       ${g.overall !== null ? `<div class="g-overall"><b>${g.overall.toFixed(1)}</b><span class="muted">${esc(t('overall'))}</span></div>` : ''}
       ${rows ? `<ul class="g-list">${rows}</ul>` : `<div class="empty">${esc(t('noGrades'))}</div>`}
       <p class="note">${esc(t('howCalc'))}</p>
-      <div class="actions"><button class="btn" data-action="closeDlg">${esc(t('close'))}</button></div></div>`;
+      ${manual.length ? `<div><div class="note"><b>${esc(t('myGrades'))}</b></div><ul class="g-list" style="margin-block-start:6px">${manual
+        .map((m) => `<li class="g-row" style="grid-template-columns:1fr auto auto"><div><div class="g-name"><bdi>${esc(m.subject)}</bdi></div>
+          <div class="g-sub"><span>${esc(m.date)}</span>${m.title ? `<span><bdi>${esc(m.title)}</bdi></span>` : ''}</div></div>
+          <div class="g-avg">${esc(m.grade)}</div>
+          <button class="btn btn-danger" style="min-height:36px;padding:2px 10px" data-action="delGrade" data-id="${esc(m.id)}" aria-label="${esc(t('delete'))}">✕</button></li>`)
+        .join('')}</ul></div>` : ''}
+      <div class="actions"><button class="btn" data-action="closeDlg">${esc(t('close'))}</button>
+        <button class="btn btn-primary" data-action="gradeForm">＋ ${esc(t('addGrade'))}</button></div></div>`;
     $('#dlgGrades').showModal();
   }
 
@@ -708,7 +855,27 @@
     else if (a === 'timerFinish') timerFinish();
     else if (a === 'closeTimer') closeTimer();
     else if (a === 'closeDlg') el.closest('dialog').close();
-    else if (a === 'srcConnect') connectSource(el.dataset.kind);
+    else if (a === 'menuTest') openAdd();
+    else if (a === 'menuGrade') openGradeForm();
+    else if (a === 'menuLesson' || a === 'timetable') {
+      $('#dlgAdd').close();
+      openTimetable();
+    } else if (a === 'gradeForm') {
+      $('#dlgGrades').close();
+      openGradeForm();
+    } else if (a === 'delGrade') {
+      state.manualGrades = state.manualGrades.filter((g) => g.id !== el.dataset.id);
+      store.set('manualGrades', state.manualGrades);
+      bump();
+      render();
+      openGrades();
+    } else if (a === 'delLesson') {
+      state.manualLessons = state.manualLessons.filter((l) => l.id !== el.dataset.id);
+      store.set('manualLessons', state.manualLessons);
+      bump();
+      render();
+      openTimetable();
+    } else if (a === 'srcConnect') connectSource(el.dataset.kind);
     else if (a === 'srcDisconnect') disconnectSource(el.dataset.kind);
     else if (a === 'delLocal') {
       state.localExams = state.localExams.filter((x) => x.id !== el.dataset.id);
@@ -739,7 +906,7 @@
       connectSource(url.dataset.url);
     }
   });
-  $('#fab').addEventListener('click', openAdd);
+  $('#fab').addEventListener('click', openMenu);
   $('#dlgTimer').addEventListener('close', () => {
     if (timer) {
       clearInterval(timer.id);

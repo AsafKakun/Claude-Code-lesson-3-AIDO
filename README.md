@@ -24,7 +24,7 @@ worked examples from SPEC §9).
   and soft readiness status, today's schedule, Today's Mission (top 3 tasks, streak, weekly goal).
 - **Header:** overall-average chip (opens the grades list), sync status + refresh, Google Sheet connection, HE/EN toggle
   (RTL flips automatically; Hebrew date shown by default in Hebrew).
-- **Quick add "+":** local tests, saved on the device only and never written to the sheet.
+- **Quick add "+":** local tests, hand-entered grades and a hand-entered timetable — saved on the device only and never written to a sheet.
 - **Focus timer:** 25-minute session that logs study time (feeds readiness, streak and weekly goal).
 - **Sample data** is built relative to today, so the dashboard always looks alive.
 
@@ -53,6 +53,21 @@ read are listed with their real row number.
 > calendar is public by design, but use **test data only** for grades until Google sign-in (SPEC decision D19) is added.
 > Tested against the school's real published calendar; the grades-only source and the personal sheet were tested only
 > with mocked Google responses.
+
+## Enter data by hand (no file needed)
+
+The **+** button opens a menu:
+
+- **Add a grade** — subject, grade (0–100, `87,5` is fine) and date; title is optional. There is **no weight field**:
+  every hand-entered grade counts as 1. Entered grades are listed in the grades dialog (tap the average chip) where
+  each one can be deleted.
+- **Add lessons** — subject, start/end time, optional room, and **one or several weekdays at once**. Lessons are numbered
+  by start time, shown in "Today's schedule", and used for free-study-time. The timetable dialog (✎ on the schedule card)
+  lists and deletes hand-entered lessons.
+- **Add a test** — local test, as before.
+
+Hand-entered data is saved on this device only and is merged with any connected sheets. As soon as something is entered
+by hand, the built-in sample data is no longer shown.
 
 ## Not built yet
 

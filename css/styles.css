@@ -246,3 +246,15 @@ button.chip:hover { background: var(--surface-2); }
 .src h3 { font-size: 16px; font-weight: 700; }
 .ok-box { font-size: 14px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid rgba(61, 220, 151, 0.5); background: rgba(61, 220, 151, 0.08); color: var(--ok); }
 .chip-status { white-space: normal; text-align: center; line-height: 1.25; max-width: 100%; }
+
+/* ---------- manual entry ---------- */
+.daychips { display: flex; gap: 6px; flex-wrap: wrap; }
+.daychip { position: relative; }
+.daychip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.daychip span {
+  display: inline-grid; place-items: center; min-width: 44px; min-height: 40px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-2); font-size: 14px; font-weight: 600;
+}
+.daychip input:checked + span { background: var(--primary); border-color: var(--primary); color: #0e1117; }
+.daychip input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; box-shadow: 0 0 0 4px var(--primary-glow); }
+.card-title .chip { flex: none; }

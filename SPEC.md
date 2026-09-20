@@ -90,6 +90,7 @@ Priority key used in this document: **P0** = must be in v1, **P1** = should be i
 - The dashboard's **Today** widget lists today's lessons in order, highlights the current/next lesson, and shows the tests that fall on that day.
 - Each test is matched to its lesson slot by subject + date, so the calendar shows "Math test — period 3".
 - **Free time is derived from the schedule:** hours outside lessons (after school, free periods, days off) become the student's default study availability (replaces most manual availability entry; manual blocked time still works on top).
+- **Manual timetable (no file needed):** the student can add lessons by hand — subject, start/end, optional room, one or several weekdays at once; periods are numbered by start time. Stored on the device, merged with any sheet schedule.
 - Holidays / days off come from the **Holidays** tab or from a `Schedule` row with `type = off`. One-off changes (substitute lesson, cancelled lesson) are Schedule rows with a specific `date`.
 
 #### F1. Exams & tests manager (P0)
@@ -156,6 +157,7 @@ Priority key used in this document: **P0** = must be in v1, **P1** = should be i
 - **"What do I need?" helper:** the student sets a target average per subject and sees the grade needed on the next test to reach it.
 - Grade colors: ≥ 85 `--ok`, 55–84 neutral/`--primary`, < 55 `--urgent` (always with a number, never color alone). Passing threshold configurable per subject (default **55**; see §7.1).
 - Subjects with no grades yet show "No grades yet" instead of 0.
+- **Manual grade entry (no weight):** the student can add a grade by hand — subject, grade (0–100), date, optional title. The form never asks for a weight; hand-entered grades always count as 1 (Decision D21). Stored on the device and can be deleted.
 
 #### F9. Settings (P0)
 - Language toggle (Hebrew / English), notification settings and channels, **Google Sheets connection**, weekly availability (auto-derived from the school schedule, editable), daily study cap, weekly study goal, week start day and school days (Sunday default; Friday configurable as school/short/off), grade scale, pass mark and target averages, backup export/import.
@@ -803,6 +805,7 @@ Status legend: **Decided** = approved by the product owner; **Deferred** = consc
 | D11 | Timetable changes during the year | `validFrom`/`validTo` for semester changes, a `date` column for one-off overrides, and a Holidays tab. | Decided | Covers substitutes and vacations without a complex editor. | §8.1, §9.2 |
 | D12 | Chart direction in Hebrew | Time axis runs in the **reading direction** (right-to-left); numbers stay LTR. | Decided | Consistent with the mirrored layout. | §7 |
 | D20 | School exam calendar and separate grades sheet | The app accepts the **school's official published exam calendar** as a source of test dates (read-only, shared per grade, no personal data), plus a **grades-only sheet**. This refines D8 (one sheet per student): the calendar is shared by the whole grade, the grades sheet stays per student. | Decided | Product owner: the official school calendar is the exam-date source; grades come from a student-only sheet. | F0, §8.1 |
+| D21 | Manual grades and timetable | Grades can be **entered by hand without a weight** (always 1) and the timetable **by hand** (several weekdays per entry) for students who have no file. Data stays on the device; hand-entered data replaces the sample data. | Decided | Product owner request: some students cannot provide a sheet. | F0.1, F8.1 |
 | D19 | Google access scope | **`spreadsheets.readonly` from the start** (sign in with Google, paste the sheet link/ID). No Picker/`drive.file` spike. **Start Google OAuth app verification early** (consent screen, privacy policy). | Decided | Product owner's choice: simplest sign-in flow; accepts verification lead time (§10.1, §11). | §10.1, §11, F0, §12 |
 | D13 | How much on the main dashboard? | **Minimal:** 3 main widgets (next test hero + countdown, today's schedule, Today's Mission) + 7-day banner; other widgets move to their own pages. | Decided | Answered by the product owner; keeps the phone view calm. | §4 |
 | D14 | Dashboard by age/level | **Simple mode for grades 7–9**, full mode from grade 10. Simple mode hides the bagrut tracker, predicted final grade, readiness score and what-if slider; grade insights otherwise stay the same. | Decided | Answered by the product owner. | §4.2 |
