@@ -258,3 +258,9 @@ button.chip:hover { background: var(--surface-2); }
 .daychip input:checked + span { background: var(--primary); border-color: var(--primary); color: #0e1117; }
 .daychip input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; box-shadow: 0 0 0 4px var(--primary-glow); }
 .card-title .chip { flex: none; }
+
+/* ---------- calendar filter ---------- */
+.filterbox { display: grid; gap: 6px; padding: 12px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); font-size: 14px; }
+.opt { display: flex; align-items: center; gap: 8px; min-height: 36px; cursor: pointer; }
+.opt input { width: 18px; height: 18px; accent-color: var(--primary); margin: 0; flex: none; }
+.pickgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 12px; }

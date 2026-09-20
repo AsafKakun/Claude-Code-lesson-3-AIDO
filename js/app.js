@@ -51,6 +51,7 @@
     done: store.get('done', {}),
     missionIds: store.get('mission', {}),
     confidence: store.get('confidence', {}),
+    calFilter: store.get('calFilter', { mode: 'auto', selected: [] }), // which calendar subjects are shown
     manualTasks: store.get('manualTasks', []), // { id, date (today), title, subject?, minutes }
     manualGrades: store.get('manualGrades', []), // { id, subject, grade, date, title } — weight is always 1
     manualLessons: store.get('manualLessons', []), // { id, weekday 1-7, start, end, subject, room }
@@ -102,12 +103,25 @@
       value.isSample = true;
     } else {
       const base = p.sheet ? p.sheet.data : { subjects: [], schedule: [], exams: [], grades: [], holidays: [] };
+      const schedule = [...base.schedule, ...manualSchedule()];
       const exams = [...base.exams];
-      if (p.calendar) exams.push(...p.calendar.data.exams.filter((c) => !exams.some((e) => e.subject === c.subject && e.date === c.date)));
+      let calendarInfo = null;
+      if (p.calendar) {
+        // the school calendar covers every track of the grade: keep only the tests of the student's subjects
+        const calAll = p.calendar.data.exams;
+        const f = calendarFilter(calAll, schedule.map((l) => l.subject).filter(Boolean));
+        const shown = calAll.filter((c) => f.allowed.has(c.subject) && !exams.some((e) => e.subject === c.subject && e.date === c.date));
+        exams.push(...shown);
+        calendarInfo = {
+          total: calAll.length,
+          shown: shown.length,
+          hasTimetable: f.hasTimetable,
+          subjects: f.subjects.map((name) => ({ name, count: calAll.filter((c) => c.subject === name).length, shown: f.allowed.has(name) })),
+        };
+      }
       // hand-entered grades never ask for a weight: every one counts as 1
       const manualGrades = state.manualGrades.map((g) => ({ date: g.date, subject: g.subject, title: g.title || '', grade: g.grade, weight: 1, id: g.id, manual: true }));
       const grades = [...base.grades, ...(p.grades ? p.grades.data.grades : []), ...manualGrades];
-      const schedule = [...base.schedule, ...manualSchedule()];
       const subjects = base.subjects.map((s) => ({ ...s }));
       // subjects that only appear in exams / grades / lessons get a colour too; names are matched loosely (quotes, niqqud)
       for (const name of [...exams.map((e) => e.subject), ...grades.map((g) => g.subject), ...schedule.map((l) => l.subject).filter(Boolean)]) {
@@ -123,10 +137,23 @@
         const s = l.subject && subjects.find((x) => SH.sameSubject(x.name, l.subject));
         if (s) l.subject = s.name;
       }
-      value = { subjects, schedule, holidays: base.holidays, exams, grades, isSample: false };
+      value = { subjects, schedule, holidays: base.holidays, exams, grades, calendarInfo, isSample: false };
     }
     state.memo = { key, value };
     return value;
+  }
+
+  // Which calendar subjects to show: 'auto' = the subjects of my timetable, 'custom' = my own pick, 'all' = everything.
+  // With no timetable, 'auto' cannot tell which tracks are mine, so nothing is hidden.
+  function calendarFilter(calExams, myLessonSubjects) {
+    const f = state.calFilter;
+    const subjects = [...new Set(calExams.map((e) => e.subject))];
+    const mine = [...new Set(myLessonSubjects)];
+    let allowed;
+    if (f.mode === 'all') allowed = subjects;
+    else if (f.mode === 'custom') allowed = subjects.filter((s) => f.selected.includes(s));
+    else allowed = mine.length ? subjects.filter((s) => mine.some((m) => SH.sameSubject(m, s))) : subjects;
+    return { subjects, allowed: new Set(allowed), hasTimetable: mine.length > 0 };
   }
 
   // hand-entered timetable: one row per weekday; periods are numbered by start time
@@ -781,7 +808,50 @@
           .map((i) => `<li>${esc(i.tab)}, ${esc(t('row'))} ${i.row}: ${esc(t('issue_' + i.key))}</li>`)
           .join('')}</ul></div>`
       : '';
-    return `<div class="ok-box">✓ ${esc(text)}</div>${issues}`;
+    return `<div class="ok-box">✓ ${esc(text)}</div>${kind === 'calendar' ? calendarFilterUI() : ''}${issues}`;
+  }
+
+  // "Which tests to show": my subjects / my own pick / all
+  function calendarFilterUI() {
+    const info = data().calendarInfo;
+    if (!info) return '';
+    const f = state.calFilter;
+    const radio = (mode, key) => `<label class="opt"><input type="radio" name="calmode" data-calmode="${mode}"${f.mode === mode ? ' checked' : ''}><span>${esc(t(key))}</span></label>`;
+    const hidden = info.subjects.filter((s) => !s.shown).map((s) => s.name);
+    const picks =
+      f.mode === 'custom'
+        ? `<div class="pickgrid">${info.subjects
+            .map((s) => `<label class="opt"><input type="checkbox" data-calsubj="${esc(s.name)}"${s.shown ? ' checked' : ''}><span><bdi>${esc(s.name)}</bdi> <span class="muted">(${s.count})</span></span></label>`)
+            .join('')}</div>`
+        : '';
+    return `<div class="filterbox"><b>${esc(t('filterTitle'))}</b>
+      ${radio('auto', 'filterAuto')}${radio('custom', 'filterCustom')}${radio('all', 'filterAll')}
+      ${f.mode === 'auto' && !info.hasTimetable ? `<p class="note">${esc(t('filterNoTimetable'))}</p>` : ''}
+      ${picks}
+      <p class="note">${esc(t('filterCount', { s: info.shown, t: info.total }))}${hidden.length && f.mode !== 'custom' ? ' · ' + esc(t('filterHidden', { list: hidden.join(', ') })) : ''}</p></div>`;
+  }
+
+  function setCalFilter(mode) {
+    if (mode === 'custom' && state.calFilter.mode !== 'custom') {
+      // start from what is shown now, so switching to "choose" does not empty the list
+      const info = data().calendarInfo;
+      state.calFilter = { mode, selected: info ? info.subjects.filter((s) => s.shown).map((s) => s.name) : [] };
+    } else state.calFilter = { ...state.calFilter, mode };
+    store.set('calFilter', state.calFilter);
+    bump();
+    render();
+    openSources();
+  }
+
+  function toggleCalSubject(name, checked) {
+    const sel = new Set(state.calFilter.selected);
+    if (checked) sel.add(name);
+    else sel.delete(name);
+    state.calFilter = { mode: 'custom', selected: [...sel] };
+    store.set('calFilter', state.calFilter);
+    bump();
+    render();
+    openSources();
   }
 
   function sourceSection(kind) {
@@ -999,6 +1069,10 @@
       drafts.url[url.dataset.url] = url.value.trim();
       return loadTabsFor(url.dataset.url);
     }
+    const calmode = ev.target.closest('[data-calmode]');
+    if (calmode) return setCalFilter(calmode.dataset.calmode);
+    const calsubj = ev.target.closest('[data-calsubj]');
+    if (calsubj) return toggleCalSubject(calsubj.dataset.calsubj, calsubj.checked);
     const tab = ev.target.closest('[data-tab]');
     if (tab) drafts.gid[tab.dataset.tab] = tab.value;
     if (ev.target.id === 'timetableFile' && ev.target.files[0]) importTimetable(ev.target.files[0]);

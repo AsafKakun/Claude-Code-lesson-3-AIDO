@@ -44,6 +44,17 @@ preselects the tab in the link. Rows look like `יום חמישי, 15/10/26, י�
 finds the subject in the text (Hebrew subject names, including specialty tracks) and the type (בוחן = quiz, מבחן = test,
 מתכונת = mock exam, בגרות = bagrut, "מועד ב׳" = second sitting). The calendar has no time of day, so none is shown.
 
+
+**Filtering the calendar to your subjects.** The school calendar lists every track of the grade, so once it is
+connected the dialog shows *Which tests to show*:
+- **Only my subjects (from my timetable)** — the default. A test is kept when its subject matches a subject in your
+  timetable (spelling variants such as `הבעה ולשון` ↔ `לשון` are matched). With no timetable nothing is hidden.
+- **Choose subjects** — tick exactly the subjects you want; it starts from what is shown now.
+- **All tests.**
+
+The dialog shows how many tests are shown (e.g. 46 of 63) and which subjects are hidden. The choice is saved on the
+device and applies to the banner, the next-test card and Today's Mission.
+
 **Student grades sheet.** Needs a **subject** column (`מקצוע`) and a **grade** column (`ציון`); optional `תאריך` (date),
 `כותרת`/`מבחן` (title) and `משקל` (weight, default 1). Title rows above the header are skipped, empty grades are ignored,
 `87,5` is read as 87.5, and subject names like `ספרות 5 יח"ל` are matched to the calendar's `ספרות`. Rows that cannot be
