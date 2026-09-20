@@ -11,6 +11,7 @@
 | ענף עבודה | `master` (מוגדר כ-upstream של `origin/master`) |
 | תיקיית הפרויקט | `Claude Code lesson 3 AIDO` |
 | טכנולוגיה | HTML + CSS + JavaScript רגיל, בלי Node ובלי שלב build |
+| אתר חי (GitHub Pages) | https://asafkakun.github.io/Claude-Code-lesson-3-AIDO/ — המאגר ציבורי, ו-Pages מוגדר על `master` / שורש; האתר מתעדכן אוטומטית תוך כדקה אחרי כל `git push` |
 | תיעוד | [`README.md`](README.md) (הפעלה ושימוש), [`SPEC.md`](SPEC.md) (מפרט ויומן החלטות D1–D24) |
 
 ## 2. כלל הזהב: כל עדכון נשמר ונדחף
