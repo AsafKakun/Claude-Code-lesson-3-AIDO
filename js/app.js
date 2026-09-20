@@ -51,6 +51,7 @@
     done: store.get('done', {}),
     missionIds: store.get('mission', {}),
     confidence: store.get('confidence', {}),
+    manualTasks: store.get('manualTasks', []), // { id, date (today), title, subject?, minutes }
     manualGrades: store.get('manualGrades', []), // { id, subject, grade, date, title } — weight is always 1
     manualLessons: store.get('manualLessons', []), // { id, weekday 1-7, start, end, subject, room }
     settings: { dailyCapMin: 180, weeklyGoalMin: 300, weakThreshold: 70, showHebrewDate: true },
@@ -365,19 +366,25 @@
     const s = L.streak(state.sessions, n);
     const wk = L.weekMinutes(state.sessions, n);
     const pct = Math.min(100, Math.round((wk / state.settings.weeklyGoalMin) * 100));
+    // suggested tasks (top 3) first, then the ones the student added for today
+    const mine = customTasks();
+    const items = [
+      ...missions.map((m) => ({ id: m.id, name: label(m.subject, m.topic), sub: `<bdi>${esc(m.examTitle)}</bdi> · ${esc(SP.i18n.daysPhrase(m.daysLeft, state.lang, t))}`, minutes: m.minutes, mine: false })),
+      ...mine.map((m) => ({ id: m.id, name: m.subject ? label(m.subject, m.title) : `<bdi>${esc(m.title)}</bdi>`, sub: esc(t('myTask')), minutes: m.minutes, mine: true })),
+    ];
     let body;
-    if (!missions.length) body = `<div class="empty">${esc(t('missionEmpty'))}</div>`;
+    if (!items.length) body = `<div class="empty">${esc(t('missionEmpty'))}</div>`;
     else {
-      const allDone = missions.every((m) => done.includes(m.id));
+      const allDone = items.every((m) => done.includes(m.id));
       body =
         '<ul class="tasks">' +
-        missions
+        items
           .map((m) => {
             const isDone = done.includes(m.id);
             return `<li class="task${isDone ? ' done' : ''}"><input type="checkbox" id="task-${esc(m.id)}" data-action="task" data-id="${esc(m.id)}" ${isDone ? 'checked' : ''}>
-              <label for="task-${esc(m.id)}"><span class="t-name">${label(m.subject, m.topic)}</span>
-              <span class="t-sub"><bdi>${esc(m.examTitle)}</bdi> · ${esc(SP.i18n.daysPhrase(m.daysLeft, state.lang, t))}</span></label>
-              <span class="t-min">${esc(dur(m.minutes))}</span></li>`;
+              <label for="task-${esc(m.id)}"><span class="t-name">${m.name}</span><span class="t-sub">${m.sub}</span></label>
+              <span class="t-min">${esc(dur(m.minutes))}</span>
+              ${m.mine ? `<button class="btn btn-danger" style="min-height:32px;padding:0 8px" data-action="delTask" data-id="${esc(m.id)}" aria-label="${esc(t('delete'))}">✕</button>` : ''}</li>`;
           })
           .join('') +
         '</ul>' +
@@ -385,7 +392,8 @@
     }
     $('#mission').innerHTML = `
       <div class="card"><div class="card-title"><span>${esc(t('mission'))}</span>
-        <span class="tag">🔥 ${esc(s ? countText(s, 'streak') : t('streakNone'))}</span></div>
+        <span style="display:flex;gap:6px;align-items:center"><span class="tag">🔥 ${esc(s ? countText(s, 'streak') : t('streakNone'))}</span>
+        <button class="chip" style="min-height:32px;padding:2px 10px;font-size:13px" data-action="menuTask" aria-label="${esc(t('addTask'))}" title="${esc(t('addTask'))}">＋</button></span></div>
         ${body}
         <div style="margin-block-start:14px" class="note">${esc(t('goal'))}: ${esc(dur(wk))} / ${esc(dur(state.settings.weeklyGoalMin))}
           <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div></div>
@@ -426,13 +434,23 @@
     saveSessions();
   }
 
+  // tasks the student added for today; tasks from earlier days are dropped
+  function customTasks() {
+    const key = L.ymd(now());
+    if (state.manualTasks.some((x) => x.date !== key)) {
+      state.manualTasks = state.manualTasks.filter((x) => x.date === key);
+      store.set('manualTasks', state.manualTasks);
+    }
+    return state.manualTasks;
+  }
+
   function toggleTask(id, checked) {
     const key = L.ymd(now());
     const done = new Set(state.done[key] || []);
-    const task = todayMission().find((m) => m.id === id);
+    const task = todayMission().find((m) => m.id === id) || customTasks().find((m) => m.id === id);
     if (checked) {
       done.add(id);
-      if (task) addSession(task.subject, task.minutes, id);
+      if (task) addSession(task.subject || '', task.minutes, id);
     } else {
       done.delete(id);
       state.sessions = state.sessions.filter((s) => !(s.taskId === id && s.date === key));
@@ -458,10 +476,40 @@
   function openMenu() {
     $('#dlgAdd').innerHTML = `<div class="dlg-body"><h2>${esc(t('addWhat'))}</h2>
       <button class="btn btn-block" data-action="menuTest">📝 ${esc(t('addTest'))}</button>
+      <button class="btn btn-block" data-action="menuTask">✅ ${esc(t('addTask'))}</button>
       <button class="btn btn-block" data-action="menuGrade">🎯 ${esc(t('addGrade'))}</button>
       <button class="btn btn-block" data-action="menuLesson">📚 ${esc(t('addLesson'))}</button>
       <div class="actions"><button class="btn" data-action="closeDlg">${esc(t('cancel'))}</button></div></div>`;
     showDlg('#dlgAdd');
+  }
+
+  // a task for today: what to do, optional subject, minutes
+  function openTaskForm() {
+    $('#dlgAdd').innerHTML = `<form method="dialog" class="dlg-body" id="formTask">
+      <h2>${esc(t('addTask'))}</h2>
+      <div class="field"><label for="tTitle">${esc(t('fTaskTitle'))}</label><input id="tTitle" maxlength="80" autocomplete="off" required></div>
+      <div class="row"><div class="field"><label for="tSubject">${esc(t('fSubjectOpt'))}</label><input id="tSubject" list="dlSubjects" maxlength="60" autocomplete="off"></div>
+        <div class="field"><label for="tMinutes">${esc(t('fMinutes'))}</label><input id="tMinutes" type="number" min="5" max="240" step="5" value="30" required></div></div>${subjectList()}
+      <div id="tMsg"></div>
+      <div class="actions"><button type="button" class="btn" data-action="closeDlg">${esc(t('cancel'))}</button>
+        <button type="submit" class="btn btn-primary">${esc(t('save'))}</button></div></form>`;
+    showDlg('#dlgAdd');
+    $('#tTitle').focus();
+    $('#formTask').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const title = $('#tTitle').value.trim();
+      const minutes = Math.round(Number($('#tMinutes').value));
+      const fail = (key) => {
+        $('#tMsg').innerHTML = `<div class="err-box">${esc(t(key))}</div>`;
+      };
+      if (!title) return fail('needTitle');
+      if (!isFinite(minutes) || minutes < 5 || minutes > 240) return fail('badMinutes');
+      state.manualTasks.push({ id: 'mt' + Date.now(), date: L.ymd(now()), title, subject: $('#tSubject').value.trim(), minutes });
+      store.set('manualTasks', state.manualTasks);
+      $('#dlgAdd').close();
+      render();
+      toast(t('taskSaved'));
+    });
   }
 
   // manual grade — subject, grade, date; never asks for a weight (it is always 1)
@@ -900,7 +948,15 @@
     else if (a === 'timerFinish') timerFinish();
     else if (a === 'closeTimer') closeTimer();
     else if (a === 'closeDlg') el.closest('dialog').close();
-    else if (a === 'menuTest') openAdd();
+    else if (a === 'menuTask') openTaskForm();
+    else if (a === 'delTask') {
+      const key = L.ymd(now());
+      state.manualTasks = state.manualTasks.filter((x) => x.id !== el.dataset.id);
+      store.set('manualTasks', state.manualTasks);
+      state.sessions = state.sessions.filter((s) => !(s.taskId === el.dataset.id && s.date === key)); // undo its logged time
+      saveSessions();
+      render();
+    } else if (a === 'menuTest') openAdd();
     else if (a === 'menuGrade') openGradeForm();
     else if (a === 'menuLesson' || a === 'timetable') {
       $('#dlgAdd').close();

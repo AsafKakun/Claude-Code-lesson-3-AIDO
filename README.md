@@ -58,6 +58,7 @@ read are listed with their real row number.
 
 The **+** button opens a menu:
 
+- **Add a task for today** — what to do, an optional subject and minutes (5–240). It appears in Today's Mission under the suggested tasks (also via the ＋ on that card). Ticking it logs the minutes (streak and weekly goal); ✕ removes it. Tasks from earlier days are dropped automatically.
 - **Add a grade** — subject, grade (0–100, `87,5` is fine) and date; title is optional. There is **no weight field**:
   every hand-entered grade counts as 1. Entered grades are listed in the grades dialog (tap the average chip) where
   each one can be deleted.
