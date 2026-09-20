@@ -37,7 +37,7 @@ merged, refreshed every 15 minutes and cached, so one failing source never hides
 |---|---|---|
 | **School exam calendar** | Test dates for your grade | Published sheet (`…/d/e/2PACX…/pubhtml`) or a regular "anyone with the link" sheet |
 | **Student grades sheet** | Grades and the averages | Same |
-| **Personal sheet** | Timetable, tests and grades (tabs `Schedule`, `Exams`, `Grades`, optional `Subjects`, `Holidays`; see [`template/`](template)) | Same |
+| **Personal sheet** | Timetable, tests and grades (tabs `Schedule`, `Exams`, `Grades`, optional `Subjects`, `Holidays`; see [`template/`](template)). **Any one of Schedule / Exams / Grades is enough**, so a sheet with only a `Schedule` tab works. Times may be `08:45` or Google-formatted `8:45:00 AM` | Same |
 
 **School exam calendar.** Paste the link; the app lists the tabs of the published sheet (for example one per grade) and
 preselects the tab in the link. Rows look like `יום חמישי, 15/10/26, י״א - מבחן ספרות`. The app removes the grade prefix,

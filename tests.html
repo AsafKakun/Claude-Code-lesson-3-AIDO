@@ -198,6 +198,14 @@
     check('blank rows keep row numbers (personal sheet)', S.normalize({ Exams: S.parseCSV('date,subject\n\n2026-10-01,Math\nbad,Math') }).issues.map((i) => i.row), [4]);
 
     // ---- timetable file import ----
+    // ---- Google-formatted times and tab detection ----
+    check('time: 24h with seconds', S.parseTime('8:45:00'), '08:45');
+    check('time: 1:00:00 PM = 13:00', S.parseTime('1:00:00 PM'), '13:00');
+    check('time: 12:15 PM stays 12:15', S.parseTime('12:15:00 PM'), '12:15');
+    check('time: 12:00 AM = 00:00', S.parseTime('12:00:00 AM'), '00:00');
+    check('time: 9:05 am', S.parseTime('9:05 am'), '09:05');
+    check('time: 13:00 PM rejected', S.parseTime('13:00 PM'), null);
+    check('time: garbage rejected', S.parseTime('soon'), null);
     check('csv: BOM is stripped', S.parseCSV('﻿weekday,start\n1,08:00')[0][0], 'weekday');
     check('csv: semicolon delimiter detected', S.detectDelimiter('weekday;start;end\n1;08:00;08:45'), ';');
     check('csv: comma is the default', S.detectDelimiter('weekday,start,end'), ',');

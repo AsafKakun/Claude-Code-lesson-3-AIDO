@@ -726,7 +726,7 @@
       const n = p.data.grades.length;
       text = t(n === 1 ? 'gradesLoadedOne' : 'gradesLoaded', { n });
     }
-    else text = t('sheetLoaded', { e: p.data.exams.length, g: p.data.grades.length });
+    else text = t('sheetLoaded', { l: p.data.schedule.length, e: p.data.exams.length, g: p.data.grades.length });
     const issues = p.issues.length
       ? `<div><b>${esc(t('issuesTitle', { n: p.issues.length }))}</b><ul class="issues">${p.issues
           .slice(0, 40)
@@ -797,7 +797,7 @@
       let cache, cfg;
       if (kind === 'sheet') {
         const { tabs, missing } = await SH.loadSheet(link);
-        if (missing.length) return setMsg(kind, errBox(t('missingTabs', { t: missing.join(', ') })));
+        if (!Object.keys(tabs).length) return setMsg(kind, errBox(t('noTabsFound')));
         cache = tabs;
         cfg = { input, link };
       } else {
@@ -854,7 +854,7 @@
       let cache;
       if (kind === 'sheet') {
         const { tabs, missing } = await SH.loadSheet(s.link);
-        if (missing.length) throw new Error('missing');
+        if (!Object.keys(tabs).length) throw new Error('missing');
         cache = tabs;
       } else {
         const r = await SH.loadSingleTab(s.link, s.gid);

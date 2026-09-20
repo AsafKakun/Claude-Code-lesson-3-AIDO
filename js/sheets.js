@@ -122,10 +122,18 @@
     return L.ymd(dt);
   }
 
+  // "08:45", "8:45:00" and — because Google formats time cells by the sheet's locale — "1:00:00 PM"
   const parseTime = (s) => {
-    const m = String(s).trim().match(/^(\d{1,2}):(\d{2})/);
-    if (!m || +m[1] > 23 || +m[2] > 59) return null;
-    return L.pad(+m[1]) + ':' + m[2];
+    const m = String(s).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?$/);
+    if (!m) return null;
+    let h = +m[1];
+    if (m[3]) {
+      if (h < 1 || h > 12) return null;
+      const pm = m[3].toLowerCase() === 'pm';
+      h = h % 12 + (pm ? 12 : 0);
+    }
+    if (h > 23 || +m[2] > 59) return null;
+    return L.pad(h) + ':' + m[2];
   };
 
   const WEEKDAYS = {
@@ -371,30 +379,38 @@
   }
 
   // Google returns the FIRST tab when a tab name doesn't exist, so check the headers to detect that.
-  function hasHeaders(rows, keys) {
+  // `not` lists columns that mean "this is a different tab" (e.g. the Exams tab must not look like a timetable or a grade list)
+  function hasHeaders(rows, keys, not) {
     if (!rows || !rows.length) return false;
     const headers = rows[0].map(headerKey);
-    return keys.every((k) => headers.includes(k));
+    return keys.every((k) => headers.includes(k)) && !(not || []).some((k) => headers.includes(k));
   }
 
-  const REQUIRED = { Schedule: ['weekday', 'start'], Exams: ['date', 'subject'], Grades: ['grade', 'subject'] };
-  const OPTIONAL = { Subjects: ['name'], Holidays: ['date'] };
+  // Any one of Schedule / Exams / Grades is enough (e.g. a sheet with only a timetable); Subjects and Holidays are optional.
+  const TABS = {
+    Schedule: { keys: ['weekday', 'start'] },
+    Exams: { keys: ['date', 'subject'], not: ['weekday', 'start', 'grade'] },
+    Grades: { keys: ['grade', 'subject'], not: ['weekday', 'start'] },
+    Subjects: { keys: ['name'], not: ['weekday', 'start', 'grade'] },
+    Holidays: { keys: ['date'], not: ['weekday', 'start', 'subject', 'grade'] },
+  };
 
   async function loadSheet(link) {
     const tabs = {};
     const missing = [];
+    let lastError = null;
     const published = link.kind === 'published' ? await listPublishedTabs(link.id) : null;
-    for (const [tab, keys] of Object.entries(REQUIRED)) {
-      const rows = await fetchRows(link, { name: tab }, published);
-      if (hasHeaders(rows, keys)) tabs[tab] = rows;
-      else missing.push(tab);
-    }
-    for (const [tab, keys] of Object.entries(OPTIONAL)) {
+    for (const [tab, spec] of Object.entries(TABS)) {
       try {
         const rows = await fetchRows(link, { name: tab }, published);
-        if (hasHeaders(rows, keys)) tabs[tab] = rows;
-      } catch (e) { /* optional tab */ }
+        if (hasHeaders(rows, spec.keys, spec.not)) tabs[tab] = rows;
+        else missing.push(tab);
+      } catch (e) {
+        lastError = e;
+        missing.push(tab);
+      }
     }
+    if (!Object.keys(tabs).length && lastError) throw lastError; // nothing readable at all → access problem
     return { tabs, missing };
   }
 

@@ -90,6 +90,7 @@ Priority key used in this document: **P0** = must be in v1, **P1** = should be i
 - The dashboard's **Today** widget lists today's lessons in order, highlights the current/next lesson, and shows the tests that fall on that day.
 - Each test is matched to its lesson slot by subject + date, so the calendar shows "Math test — period 3".
 - **Free time is derived from the schedule:** hours outside lessons (after school, free periods, days off) become the student's default study availability (replaces most manual availability entry; manual blocked time still works on top).
+- **Personal sheet with any single tab:** at least one of Schedule / Exams / Grades is enough; times in 24h or am/pm are read.
 - **Timetable file import:** a CSV with the Schedule-tab columns can be uploaded in the app (UTF-8 or Excel-Hebrew encoding; `,` `;` or tab); re-importing replaces the previous import (Decision D22).
 - **Manual timetable (no file needed):** the student can add lessons by hand — subject, start/end, optional room, one or several weekdays at once; periods are numbered by start time. Stored on the device, merged with any sheet schedule.
 - Holidays / days off come from the **Holidays** tab or from a `Schedule` row with `type = off`. One-off changes (substitute lesson, cancelled lesson) are Schedule rows with a specific `date`.
