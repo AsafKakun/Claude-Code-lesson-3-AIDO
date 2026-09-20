@@ -198,6 +198,15 @@
     check('blank rows keep row numbers (personal sheet)', S.normalize({ Exams: S.parseCSV('date,subject\n\n2026-10-01,Math\nbad,Math') }).issues.map((i) => i.row), [4]);
 
     // ---- timetable file import ----
+    // ---- exam blocks: ב׳ = software engineering / biomedicine / biotechnology / computer science, everything else א׳ ----
+    check('block: software engineering → ב', S.blockOfSubjects(['מתמטיקה', 'הנדסת תוכנה']).block, 'ב');
+    check('block: software engineering track reported', S.blockOfSubjects(['הנדסת תוכנה']).track, 'הנדסת תוכנה');
+    check('block: biomedicine → ב', S.blockOfSubjects(['ביו-רפואה']).block, 'ב');
+    check('block: biotechnology → ב', S.blockOfSubjects(['ביוטכנולוגיה']).block, 'ב');
+    check('block: computer science → ב', S.blockOfSubjects(['מדעי המחשב']).block, 'ב');
+    check('block: any other track → א', S.blockOfSubjects(['מתמטיקה', 'פיזיקה', 'חנ״ג']).block, 'א');
+    check('block: biology is not biotechnology', S.blockOfSubjects(['ביולוגיה']).block, 'א');
+    check('subject names: biotechnology recognised', S.canonicalSubject('בגרות ביוטכנולוגיה'), 'ביוטכנולוגיה');
     // ---- Google-formatted times and tab detection ----
     check('time: 24h with seconds', S.parseTime('8:45:00'), '08:45');
     check('time: 1:00:00 PM = 13:00', S.parseTime('1:00:00 PM'), '13:00');

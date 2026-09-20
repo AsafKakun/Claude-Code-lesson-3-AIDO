@@ -116,6 +116,7 @@
           total: calAll.length,
           shown: shown.length,
           hasTimetable: f.hasTimetable,
+          block: f.block,
           subjects: f.subjects.map((name) => ({ name, count: calAll.filter((c) => c.subject === name).length, shown: f.allowed.has(name) })),
         };
       }
@@ -152,8 +153,13 @@
     let allowed;
     if (f.mode === 'all') allowed = subjects;
     else if (f.mode === 'custom') allowed = subjects.filter((s) => f.selected.includes(s));
-    else allowed = mine.length ? subjects.filter((s) => mine.some((m) => SH.sameSubject(m, s))) : subjects;
-    return { subjects, allowed: new Set(allowed), hasTimetable: mine.length > 0 };
+    // block exams ("גוש א׳" / "גוש ב׳") belong to the student's own block, decided by the track in the timetable
+    const b = SH.blockOfSubjects(mine);
+    const isBlock = (s) => /^גוש /.test(s);
+    if (f.mode !== 'all' && f.mode !== 'custom') {
+      allowed = mine.length ? subjects.filter((s) => (isBlock(s) ? SH.norm(s).endsWith(' ' + b.block) : mine.some((m) => SH.sameSubject(m, s)))) : subjects;
+    }
+    return { subjects, allowed: new Set(allowed), hasTimetable: mine.length > 0, block: mine.length ? b : null };
   }
 
   // hand-entered timetable: one row per weekday; periods are numbered by start time
@@ -827,6 +833,7 @@
     return `<div class="filterbox"><b>${esc(t('filterTitle'))}</b>
       ${radio('auto', 'filterAuto')}${radio('custom', 'filterCustom')}${radio('all', 'filterAll')}
       ${f.mode === 'auto' && !info.hasTimetable ? `<p class="note">${esc(t('filterNoTimetable'))}</p>` : ''}
+      ${f.mode === 'auto' && info.block ? `<p class="note">${esc(t('filterBlock', { b: info.block.block + '׳', track: info.block.track || '—' }))}</p>` : ''}
       ${picks}
       <p class="note">${esc(t('filterCount', { s: info.shown, t: info.total }))}${hidden.length && f.mode !== 'custom' ? ' · ' + esc(t('filterHidden', { list: hidden.join(', ') })) : ''}</p></div>`;
   }

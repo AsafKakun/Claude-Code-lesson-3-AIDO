@@ -48,7 +48,7 @@ finds the subject in the text (Hebrew subject names, including specialty tracks)
 **Filtering the calendar to your subjects.** The school calendar lists every track of the grade, so once it is
 connected the dialog shows *Which tests to show*:
 - **Only my subjects (from my timetable)** — the default. A test is kept when its subject matches a subject in your
-  timetable (spelling variants such as `הבעה ולשון` ↔ `לשון` are matched). With no timetable nothing is hidden.
+  timetable (spelling variants such as `הבעה ולשון` ↔ `לשון` are matched). **Exam blocks:** `גוש ב׳` covers the tracks software engineering (הנדסת תוכנה), biomedicine, biotechnology and computer science; every other track is `גוש א׳`. The app picks your block from the tracks in your timetable and shows only that block's tests. With no timetable nothing is hidden.
 - **Choose subjects** — tick exactly the subjects you want; it starts from what is shown now.
 - **All tests.**
 

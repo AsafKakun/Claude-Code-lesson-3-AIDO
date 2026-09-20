@@ -162,7 +162,8 @@
 
   // keyword (normalised) → display name. Order matters: first match wins.
   const SUBJECT_WORDS = [
-    ['חינוך תעבורתי', 'חינוך תעבורתי'], ['הנדסת תוכנה', 'הנדסת תוכנה'], ['חנג', 'חנ״ג'],
+    ['חינוך תעבורתי', 'חינוך תעבורתי'], ['הנדסת תוכנה', 'הנדסת תוכנה'], ['מדעי המחשב', 'מדעי המחשב'], ['ביורפואה', 'ביורפואה'],
+    ['ביוטכנולוגיה', 'ביוטכנולוגיה'], ['חנג', 'חנ״ג'],
     ['פסיכולוגיה', 'פסיכולוגיה'], ['פסיכולגיה', 'פסיכולוגיה'], // the second is a spelling variant found in the school's sheet ['פילוסופיה', 'פילוסופיה'], ['פילוספיה', 'פילוסופיה'],
     ['היסטוריה', 'היסטוריה'], ['אזרחות', 'אזרחות'], ['ספרות', 'ספרות'], ['אנגלית', 'אנגלית'], ['מתמטיקה', 'מתמטיקה'],
     ['חדוא', 'חדו״א'], ['לשון', 'לשון'], ['תנך', 'תנ״ך'], ['ביולוגיה', 'ביולוגיה'], ['פיזיקה', 'פיזיקה'], ['כימיה', 'כימיה'],
@@ -172,6 +173,16 @@
     const n = norm(text);
     for (const [k, v] of SUBJECT_WORDS) if (n.includes(k)) return v;
     return null;
+  }
+  // Tracks (מגמות) are grouped into two exam blocks: block ב׳ = software engineering, biomedicine,
+  // biotechnology and computer science; every other track is block א׳ (rule given by the product owner).
+  const B_TRACKS = ['הנדסת תוכנה', 'ביורפואה', 'ביוטכנולוגיה', 'מדעי המחשב', 'מדמח'];
+  const flat = (s) => norm(s).replace(/[-\s]/g, '');
+  const trackOf = (subject) => B_TRACKS.find((k) => flat(subject).includes(flat(k))) || null;
+  // Which block do these timetable subjects belong to? { block: 'א' | 'ב', track: the block-ב track found, if any }
+  function blockOfSubjects(subjects) {
+    const track = subjects.map(trackOf).find(Boolean) || null;
+    return { block: track ? 'ב' : 'א', track };
   }
   const sameSubject = (a, b) => norm(a) === norm(b) || (canonicalSubject(a) && canonicalSubject(a) === canonicalSubject(b));
 
@@ -430,7 +441,7 @@
 
   Object.assign(SP, {
     sheets: {
-      parseCSV, toObjects, parseDate, parseTime, parseWeekday, normalize, PALETTE, norm, canonicalSubject, sameSubject,
+      parseCSV, toObjects, parseDate, parseTime, parseWeekday, normalize, PALETTE, norm, canonicalSubject, sameSubject, blockOfSubjects,
       parseGradeRows, parseExamCalendar, parseScheduleRows, detectDelimiter, parseLink, listPublishedTabs, loadSheet, loadSingleTab, fetchRows,
       // kept for tests / callers that only need an id
       extractId: (s) => { const l = parseLink(s); return l ? l.id : null; },
