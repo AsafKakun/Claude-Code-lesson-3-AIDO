@@ -7,6 +7,10 @@ from a Google Sheet. The full product spec is in [SPEC.md](SPEC.md).
 This first build is **plain HTML/CSS/JS** (no install, no build step). It follows the spec's dashboard (§4) and
 algorithms (§9).
 
+## Live site
+
+The site is published with GitHub Pages: **https://asafkakun.github.io/Claude-Code-lesson-3-AIDO/** — every `git push` to `master` updates it within about a minute. Google Sheet sources work there too (checked with the school's real published calendar).
+
 ## Run it
 
 Needs nothing but Windows PowerShell:
