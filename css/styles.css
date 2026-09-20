@@ -42,7 +42,7 @@ bdi { unicode-bidi: isolate; }
 
 /* ---------- top bar ---------- */
 .topbar {
-  position: sticky; top: 0; z-index: 20;
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 10px var(--gutter);
   background: rgba(14, 17, 23, 0.86);

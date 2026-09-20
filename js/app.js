@@ -30,6 +30,8 @@
     },
   };
 
+  // The hosted (Artifact) build sets window.SP_HOSTED: network requests are blocked there, so sheets cannot be read.
+  const HOSTED = !!window.SP_HOSTED;
   const KINDS = ['calendar', 'grades', 'sheet'];
   // storage keys per source: link config + cached raw rows/tabs (so data stays visible offline, SPEC §11)
   const CFG = { calendar: 'calendar', grades: 'gradesSrc', sheet: 'sheetLink' };
@@ -581,7 +583,7 @@
   // timetable file (CSV): same columns as the Schedule tab. Re-importing replaces the previously imported lessons.
   async function readTextFile(file) {
     let text = await file.text();
-    if (text.includes('�')) text = new TextDecoder('windows-1255').decode(await file.arrayBuffer()); // Excel "Hebrew" CSV
+    if (text.includes(String.fromCharCode(0xfffd))) text = new TextDecoder('windows-1255').decode(await file.arrayBuffer()); // Excel "Hebrew" CSV
     return text;
   }
 
@@ -639,7 +641,7 @@
       ${days || `<div class="empty">${esc(t('noLessonsYet'))}<br>${esc(t('addLessonHint'))}</div>`}
       <section class="src" style="margin-block-start:8px">
         <h3>${esc(t('importTimetable'))}</h3>
-        <p class="note">${esc(t('importHelp'))} <a href="template/Schedule.csv" download style="color:var(--accent)">${esc(t('downloadTemplate'))}</a></p>
+        <p class="note">${esc(t('importHelp'))}${HOSTED ? '' : ` <a href="template/Schedule.csv" download style="color:var(--accent)">${esc(t('downloadTemplate'))}</a>`}</p>
         <div class="field"><input id="timetableFile" type="file" accept=".csv,text/csv,text/plain" aria-label="${esc(t('importTimetable'))}"></div>
         <div id="importMsg">${drafts.importMsg || ''}</div>
         ${state.manualLessons.some((l) => l.source === 'file') ? `<div class="actions"><button type="button" class="btn btn-danger" data-action="removeImported">${esc(t('removeImported'))}</button></div>` : ''}
@@ -890,6 +892,7 @@
   function openSources() {
     const dlg = $('#dlgSheet');
     dlg.innerHTML = `<div class="dlg-body"><h2>${esc(t('sources'))}</h2>
+      ${HOSTED ? `<div class="warn-box">${esc(t('hostedNoSheets'))}</div>` : ''}
       ${KINDS.map(sourceSection).join('')}
       <div class="actions"><button class="btn" data-action="closeDlg">${esc(t('close'))}</button></div></div>`;
     if (!dlg.open) dlg.showModal();
@@ -901,6 +904,7 @@
   const errBox = (text) => `<div class="err-box">${esc(text)}</div>`;
 
   async function loadTabsFor(kind) {
+    if (HOSTED) return;
     const link = SH.parseLink(drafts.url[kind]);
     drafts.tabs[kind] = [];
     if (link && link.kind === 'published' && kind !== 'sheet') {
@@ -914,6 +918,7 @@
   }
 
   async function connectSource(kind) {
+    if (HOSTED) return setMsg(kind, errBox(t('hostedNoSheets')));
     const input = (drafts.url[kind] || (state.src[kind] && state.src[kind].input) || '').trim();
     const link = SH.parseLink(input);
     if (!link) return setMsg(kind, errBox(t('badLink')));
@@ -997,7 +1002,7 @@
   }
 
   async function sync() {
-    if (!hasSources()) return;
+    if (!hasSources() || HOSTED) return;
     await Promise.all(KINDS.map(syncKind));
     bump();
     render();

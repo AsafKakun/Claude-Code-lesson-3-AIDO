@@ -99,3 +99,9 @@ sign-in. See the roadmap in SPEC §12.
 | `js/app.js` | Rendering and events |
 | `tests.html` | Browser-run tests |
 | `tools/serve.ps1` | Static dev server without Node/Python |
+
+## Hosted preview (Claude Artifact)
+
+`tools/build-artifact.ps1` builds `dist/artifact.html` (git-ignored): the whole site inlined into one HTML file that
+can be published as a private Claude Artifact. The hosted page blocks network requests, so **Google Sheet sources do not
+work there** (the dialog says so); sample data, hand-entered lessons/grades/tasks and timetable-file import do.
