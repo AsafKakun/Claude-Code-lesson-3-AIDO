@@ -389,6 +389,32 @@
     return parseCSV(await fetchText(csvUrl(link, s)));
   }
 
+  // ---------- Airtable (timetable table, read with a personal access token) ----------
+  // link: https://airtable.com/appXXXXXXXXXXXXXX/tblXXXXXXXXXXXXXX/… (the address of the table in the browser)
+  function parseAirtableLink(input) {
+    const s = String(input || '');
+    const base = s.match(/\b(app[a-zA-Z0-9]{14})\b/);
+    const table = s.match(/\b(tbl[a-zA-Z0-9]{14})\b/);
+    return base && table ? { baseId: base[1], tableId: table[1] } : null;
+  }
+
+  // Rows (header row first, like a CSV) from every record of the table; field names are the column names.
+  async function loadAirtable(link, token) {
+    const records = [];
+    let offset = '';
+    do {
+      const url = 'https://api.airtable.com/v0/' + link.baseId + '/' + link.tableId + '?pageSize=100' + (offset ? '&offset=' + encodeURIComponent(offset) : '');
+      const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      if (!res.ok) throw new Error('http ' + res.status);
+      const body = await res.json();
+      records.push(...(body.records || []));
+      offset = body.offset || '';
+    } while (offset);
+    const headers = [...new Set(records.flatMap((r) => Object.keys(r.fields || {})))];
+    const cell = (v) => (v == null ? '' : Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? v.name || '' : String(v));
+    return [headers, ...records.map((r) => headers.map((h) => cell(r.fields[h])))];
+  }
+
   // Google returns the FIRST tab when a tab name doesn't exist, so check the headers to detect that.
   // `not` lists columns that mean "this is a different tab" (e.g. the Exams tab must not look like a timetable or a grade list)
   function hasHeaders(rows, keys, not) {
@@ -443,6 +469,7 @@
     sheets: {
       parseCSV, toObjects, parseDate, parseTime, parseWeekday, normalize, PALETTE, norm, canonicalSubject, sameSubject, blockOfSubjects,
       parseGradeRows, parseExamCalendar, parseScheduleRows, detectDelimiter, parseLink, listPublishedTabs, loadSheet, loadSingleTab, fetchRows,
+      parseAirtableLink, loadAirtable,
       // kept for tests / callers that only need an id
       extractId: (s) => { const l = parseLink(s); return l ? l.id : null; },
     },

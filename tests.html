@@ -146,6 +146,8 @@
     check('regular link: kind, id and gid', [reg.kind, reg.id, reg.gid], ['sheet', '1AbC_defGHI-jklMNOPqrs123', '42']);
     check('published id is not mistaken for the letter e', S.parseLink('https://docs.google.com/spreadsheets/d/e/2PACX-1vSx/pubhtml').id, '2PACX-1vSx');
     check('junk link rejected', S.parseLink('hello'), null);
+    check('Airtable table link: base and table', S.parseAirtableLink('https://airtable.com/appmsE2WLIFOSvh82/tbl16HAawVOQMPjGC/viwIQYiyrHNk45yfY?blocks=hide'), { baseId: 'appmsE2WLIFOSvh82', tableId: 'tbl16HAawVOQMPjGC' });
+    check('Airtable link without a table rejected', S.parseAirtableLink('https://airtable.com/appmsE2WLIFOSvh82'), null);
 
     // ---- school exam calendar (excerpt of the real published layout: title rows, section row, blank row) ----
     const calCsv = [

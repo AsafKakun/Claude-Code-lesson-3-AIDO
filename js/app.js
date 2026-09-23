@@ -32,10 +32,11 @@
 
   // The hosted (Artifact) build sets window.SP_HOSTED: network requests are blocked there, so sheets cannot be read.
   const HOSTED = !!window.SP_HOSTED;
-  const KINDS = ['calendar', 'grades', 'sheet'];
+  const KINDS = ['calendar', 'grades', 'sheet', 'airtable'];
   // storage keys per source: link config + cached raw rows/tabs (so data stays visible offline, SPEC §11)
-  const CFG = { calendar: 'calendar', grades: 'gradesSrc', sheet: 'sheetLink' };
-  const CACHE = { calendar: 'calendarRows', grades: 'gradesRows', sheet: 'tabs' };
+  // the Airtable config also holds the student's access token — it stays on this device only
+  const CFG = { calendar: 'calendar', grades: 'gradesSrc', sheet: 'sheetLink', airtable: 'airtableSrc' };
+  const CACHE = { calendar: 'calendarRows', grades: 'gradesRows', sheet: 'tabs', airtable: 'airtableRows' };
 
   const legacyId = store.get('sheetId', null); // older builds stored only the sheet id
   const state = {
@@ -44,9 +45,10 @@
       calendar: store.get(CFG.calendar, null), // { input, link, gid, tabName }
       grades: store.get(CFG.grades, null),
       sheet: store.get(CFG.sheet, null) || (legacyId ? { input: '', link: { kind: 'sheet', id: legacyId, gid: null } } : null),
+      airtable: store.get(CFG.airtable, null), // { input, link: { baseId, tableId }, token }
     },
-    parsed: { calendar: null, grades: null, sheet: null }, // { data, issues }
-    errors: { calendar: false, grades: false, sheet: false },
+    parsed: { calendar: null, grades: null, sheet: null, airtable: null }, // { data, issues }
+    errors: { calendar: false, grades: false, sheet: false, airtable: false },
     lastSync: store.get('lastSync', null),
     sessions: store.get('sessions', []),
     localExams: store.get('localExams', []),
@@ -77,6 +79,10 @@
       const r = SH.normalize(cache);
       return { data: r.data, issues: r.issues };
     }
+    if (kind === 'airtable') {
+      const r = SH.parseScheduleRows(cache, 'Airtable');
+      return { data: { schedule: r.schedule }, issues: r.issues };
+    }
     if (kind === 'calendar') {
       const r = SH.parseExamCalendar(cache);
       return { data: { exams: r.exams }, issues: r.issues, missingColumns: r.missingColumns };
@@ -100,12 +106,12 @@
     let value;
     const p = state.parsed;
     const hasManual = state.manualGrades.length > 0 || state.manualLessons.length > 0;
-    if (!p.sheet && !p.calendar && !p.grades && !hasManual) {
+    if (!p.sheet && !p.calendar && !p.grades && !p.airtable && !hasManual) {
       value = SP.sample.build(now(), state.lang);
       value.isSample = true;
     } else {
       const base = p.sheet ? p.sheet.data : { subjects: [], schedule: [], exams: [], grades: [], holidays: [] };
-      const schedule = [...base.schedule, ...manualSchedule()];
+      const schedule = [...base.schedule, ...(p.airtable ? p.airtable.data.schedule : []), ...manualSchedule()];
       const exams = [...base.exams];
       let calendarInfo = null;
       if (p.calendar) {
@@ -795,7 +801,7 @@
 
   // ---------- data sources dialog ----------
   // drafts keep what the student typed while the dialog is re-rendered
-  const drafts = { url: { calendar: '', grades: '', sheet: '' }, gid: {}, tabs: {}, msg: {}, importMsg: '' };
+  const drafts = { url: { calendar: '', grades: '', sheet: '', airtable: '' }, token: '', gid: {}, tabs: {}, msg: {}, importMsg: '' };
 
   function sourceSummary(kind) {
     const s = state.src[kind];
@@ -808,7 +814,7 @@
     } else if (kind === 'grades') {
       const n = p.data.grades.length;
       text = t(n === 1 ? 'gradesLoadedOne' : 'gradesLoaded', { n });
-    }
+    } else if (kind === 'airtable') text = t('airtableLoaded', { n: p.data.schedule.length });
     else text = t('sheetLoaded', { l: p.data.schedule.length, e: p.data.exams.length, g: p.data.grades.length });
     const issues = p.issues.length
       ? `<div><b>${esc(t('issuesTitle', { n: p.issues.length }))}</b><ul class="issues">${p.issues
@@ -865,8 +871,8 @@
 
   function sourceSection(kind) {
     const s = state.src[kind];
-    const title = { calendar: 'srcCalendarTitle', grades: 'srcGradesTitle', sheet: 'srcSheetTitle' }[kind];
-    const help = { calendar: 'srcCalendarHelp', grades: 'srcGradesHelp', sheet: 'srcSheetHelp' }[kind];
+    const title = { calendar: 'srcCalendarTitle', grades: 'srcGradesTitle', sheet: 'srcSheetTitle', airtable: 'srcAirtableTitle' }[kind];
+    const help = { calendar: 'srcCalendarHelp', grades: 'srcGradesHelp', sheet: 'srcSheetHelp', airtable: 'srcAirtableHelp' }[kind];
     const tabs = drafts.tabs[kind] || [];
     const chosen = drafts.gid[kind] || (s && s.gid) || '';
     const tabPicker = tabs.length
@@ -878,8 +884,9 @@
     return `<section class="src" data-kind="${kind}">
       <h3>${esc(t(title))}</h3>
       <p class="note">${esc(t(help))}</p>
-      ${kind !== 'calendar' ? `<div class="warn-box">${esc(t('publicWarn'))}</div>` : ''}
-      <div class="field"><input data-url="${kind}" dir="ltr" placeholder="${esc(t('linkPlaceholder'))}" value="${esc(value)}" aria-label="${esc(t(title))}"></div>
+      ${kind === 'sheet' || kind === 'grades' ? `<div class="warn-box">${esc(t('publicWarn'))}</div>` : ''}
+      <div class="field"><input data-url="${kind}" dir="ltr" placeholder="${esc(t(kind === 'airtable' ? 'airtableLinkPlaceholder' : 'linkPlaceholder'))}" value="${esc(value)}" aria-label="${esc(t(title))}"></div>
+      ${kind === 'airtable' ? `<div class="field"><input data-token type="password" dir="ltr" autocomplete="off" placeholder="${esc(s ? t('airtableTokenSaved') : t('airtableToken'))}" value="${esc(drafts.token)}" aria-label="${esc(t('airtableToken'))}"></div>` : ''}
       ${tabPicker}
       <div id="msg-${kind}">${drafts.msg[kind] ? drafts.msg[kind] : ''}</div>
       ${sourceSummary(kind)}
@@ -920,6 +927,7 @@
   async function connectSource(kind) {
     if (HOSTED) return setMsg(kind, errBox(t('hostedNoSheets')));
     const input = (drafts.url[kind] || (state.src[kind] && state.src[kind].input) || '').trim();
+    if (kind === 'airtable') return connectAirtable(input);
     const link = SH.parseLink(input);
     if (!link) return setMsg(kind, errBox(t('badLink')));
     setMsg(kind, `<div class="note">${esc(t('connecting'))}</div>`);
@@ -957,6 +965,36 @@
     }
   }
 
+  // Airtable timetable: table link + personal access token (scope data.records:read)
+  async function connectAirtable(input) {
+    const kind = 'airtable';
+    const link = SH.parseAirtableLink(input);
+    if (!link) return setMsg(kind, errBox(t('badAirtableLink')));
+    const token = (drafts.token || (state.src[kind] && state.src[kind].token) || '').trim();
+    if (!token) return setMsg(kind, errBox(t('airtableNoToken')));
+    setMsg(kind, `<div class="note">${esc(t('connecting'))}</div>`);
+    try {
+      const rows = await SH.loadAirtable(link, token);
+      const probe = parseSource(kind, rows);
+      if (!probe.data.schedule.length) return setMsg(kind, errBox(t('airtableEmpty')));
+      const cfg = { input, link, token };
+      state.src[kind] = cfg;
+      store.set(CFG[kind], cfg);
+      store.set(CACHE[kind], rows);
+      state.parsed[kind] = probe;
+      state.errors[kind] = false;
+      state.lastSync = Date.now();
+      store.set('lastSync', state.lastSync);
+      drafts.msg[kind] = '';
+      drafts.token = '';
+      bump();
+      render();
+      openSources();
+    } catch (e) {
+      setMsg(kind, errBox(t('airtableNoAccess')));
+    }
+  }
+
   function disconnectSource(kind) {
     state.src[kind] = null;
     state.parsed[kind] = null;
@@ -964,6 +1002,7 @@
     [CFG[kind], CACHE[kind]].forEach((k) => store.del(k));
     if (kind === 'sheet') store.del('sheetId');
     drafts.url[kind] = '';
+    if (kind === 'airtable') drafts.token = '';
     drafts.tabs[kind] = [];
     drafts.gid[kind] = '';
     drafts.msg[kind] = '';
@@ -982,7 +1021,8 @@
     if (!s) return;
     try {
       let cache;
-      if (kind === 'sheet') {
+      if (kind === 'airtable') cache = await SH.loadAirtable(s.link, s.token);
+      else if (kind === 'sheet') {
         const { tabs, missing } = await SH.loadSheet(s.link);
         if (!Object.keys(tabs).length) throw new Error('missing');
         cache = tabs;
@@ -1092,8 +1132,13 @@
   document.addEventListener('input', (ev) => {
     const url = ev.target.closest('[data-url]');
     if (url) drafts.url[url.dataset.url] = url.value.trim();
+    if (ev.target.matches('[data-token]')) drafts.token = ev.target.value.trim();
   });
   document.addEventListener('keydown', (ev) => {
+    if (ev.target.matches && ev.target.matches('[data-token]') && ev.key === 'Enter') {
+      ev.preventDefault();
+      return connectSource('airtable');
+    }
     const url = ev.target.closest && ev.target.closest('[data-url]');
     if (url && ev.key === 'Enter') {
       ev.preventDefault();
